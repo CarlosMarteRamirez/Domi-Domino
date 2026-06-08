@@ -138,6 +138,77 @@ interface Props {
   mySeat: number;
   playerCount: number;
   playerSeats: Map<string, number>;
+  /** Posición en px (relativa al contenedor de mesa) en el borde del tablero verde. */
+  getPassAnchor?: (seat: SeatPosition) => { x: number; y: number } | null;
+}
+
+function PassNotification({
+  seat,
+  duration,
+  isBonus,
+  displayName,
+  amount,
+  teamIndex,
+  getPassAnchor,
+}: {
+  seat: SeatPosition;
+  duration: number;
+  isBonus: boolean;
+  displayName: string;
+  amount?: number;
+  teamIndex?: number;
+  getPassAnchor?: (seat: SeatPosition) => { x: number; y: number } | null;
+}) {
+  const [anchor, setAnchor] = React.useState<{ x: number; y: number } | null>(null);
+
+  React.useLayoutEffect(() => {
+    const measure = () => setAnchor(getPassAnchor?.(seat) ?? null);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [seat, getPassAnchor]);
+
+  const fallback = ORIGIN[seat];
+  const style = {
+    left: anchor ? anchor.x : fallback.x,
+    top: anchor ? anchor.y : fallback.y,
+    transform: "translate(-50%, -50%)",
+    "--pass-duration": `${duration}ms`,
+  } as React.CSSProperties;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-30">
+      <div className="absolute animate-pass-float" style={style}>
+        <div
+          className={cn(
+            "rounded-full px-4 py-2 text-center shadow-lg backdrop-blur-sm",
+            isBonus
+              ? "border border-emerald-400/50 bg-emerald-500/15"
+              : "border border-amber-400/60 bg-amber-500/20",
+          )}
+        >
+          <p
+            className={cn(
+              "text-xs font-semibold",
+              isBonus ? "text-emerald-200/90" : "text-amber-200",
+            )}
+          >
+            {displayName}
+          </p>
+          {isBonus ? (
+            <>
+              <p className="text-sm font-bold text-emerald-100">+{amount} puntos</p>
+              <p className="text-[10px] text-emerald-200/70">
+                Eq. {(teamIndex ?? 0) + 1} · todos pasaron
+              </p>
+            </>
+          ) : (
+            <p className="text-sm font-bold text-amber-100">Pasa 🃏</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function MatchAnimationLayer({
@@ -146,6 +217,7 @@ export function MatchAnimationLayer({
   mySeat,
   playerCount,
   playerSeats,
+  getPassAnchor,
 }: Props) {
   if (!action) return null;
 
@@ -161,55 +233,19 @@ export function MatchAnimationLayer({
       playerCount,
       playerSeats,
     );
-    const pos = ORIGIN[seat];
     const duration =
       action.type === "pass" ? MATCH_ANIM_MS.pass : MATCH_ANIM_MS.passBonus;
-    const isBonus = action.type === "passBonus";
 
     return (
-      <div className="pointer-events-none absolute inset-0 z-30">
-        <div
-          className="absolute animate-pass-float"
-          style={
-            {
-              left: pos.x,
-              top: pos.y,
-              transform: "translate(-50%, -50%)",
-              "--pass-duration": `${duration}ms`,
-            } as React.CSSProperties
-          }
-        >
-          <div
-            className={cn(
-              "rounded-full px-4 py-2 text-center shadow-lg backdrop-blur-sm",
-              isBonus
-                ? "border border-emerald-400/50 bg-emerald-500/15"
-                : "border border-amber-400/60 bg-amber-500/20",
-            )}
-          >
-            <p
-              className={cn(
-                "text-xs font-semibold",
-                isBonus ? "text-emerald-200/90" : "text-amber-200",
-              )}
-            >
-              {action.displayName}
-            </p>
-            {isBonus ? (
-              <>
-                <p className="text-sm font-bold text-emerald-100">
-                  +{action.amount} puntos
-                </p>
-                <p className="text-[10px] text-emerald-200/70">
-                  Eq. {action.teamIndex + 1} · todos pasaron
-                </p>
-              </>
-            ) : (
-              <p className="text-sm font-bold text-amber-100">Pasa 🃏</p>
-            )}
-          </div>
-        </div>
-      </div>
+      <PassNotification
+        seat={seat}
+        duration={duration}
+        isBonus={action.type === "passBonus"}
+        displayName={action.displayName}
+        amount={action.type === "passBonus" ? action.amount : undefined}
+        teamIndex={action.type === "passBonus" ? action.teamIndex : undefined}
+        getPassAnchor={getPassAnchor}
+      />
     );
   }
 

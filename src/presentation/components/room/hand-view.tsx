@@ -33,7 +33,7 @@ export function HandView({
     onSelectTile(selectedTile === tileId ? null : tileId);
   }
 
-  function handleDragStart(e: React.DragEvent, tileId: string) {
+  function handleDragStart(e: React.DragEvent<HTMLButtonElement>, tileId: string) {
     if (!isMyTurn || disabled || !(movesByTile.get(tileId)?.length ?? 0)) {
       e.preventDefault();
       return;
@@ -41,13 +41,25 @@ export function HandView({
     e.dataTransfer.setData("text/plain", tileId);
     e.dataTransfer.effectAllowed = "move";
     onSelectTile(tileId);
+
+    // Ghost sin translate: evita que el navegador recorte la parte superior al arrastrar.
+    const source = e.currentTarget;
+    const ghost = source.cloneNode(true) as HTMLElement;
+    ghost.style.transform = "none";
+    ghost.style.position = "fixed";
+    ghost.style.top = "-1000px";
+    ghost.style.left = "-1000px";
+    ghost.style.pointerEvents = "none";
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
+    requestAnimationFrame(() => ghost.remove());
   }
 
   const visibleTiles = tiles.filter((id) => id !== hiddenTileId);
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end justify-center gap-2 md:gap-3">
+      <div className="flex flex-wrap items-end justify-center gap-2 overflow-visible py-1 md:gap-3">
         {visibleTiles.map((id) => {
           const tile = Tile.fromId(id);
           const playable = isMyTurn && !disabled && (movesByTile.get(id)?.length ?? 0) > 0;

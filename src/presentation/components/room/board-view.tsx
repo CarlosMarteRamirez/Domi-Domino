@@ -225,7 +225,10 @@ export const BoardView = React.forwardRef<BoardViewHandle, Props>(function Board
       >
         <PlacementZone
           side="left"
-          visible={showLeft || (isDraggingOver && playableSides.includes("left"))}
+          visible={
+            !isEmpty &&
+            (showLeft || (isDraggingOver && playableSides.includes("left")))
+          }
           highlighted={highlightLeft}
           onPlace={onPlace}
           tileClassName={zoneClassName}
@@ -270,7 +273,10 @@ export const BoardView = React.forwardRef<BoardViewHandle, Props>(function Board
 
         <PlacementZone
           side="right"
-          visible={showRight || (isDraggingOver && playableSides.includes("right"))}
+          visible={
+            !isEmpty &&
+            (showRight || (isDraggingOver && playableSides.includes("right")))
+          }
           highlighted={highlightRight}
           onPlace={onPlace}
           tileClassName={zoneClassName}

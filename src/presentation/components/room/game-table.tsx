@@ -13,6 +13,9 @@ import { PlayFlyAnimation } from "./play-fly-animation";
 
 type SeatPosition = "top" | "bottom" | "left" | "right";
 
+/** Distancia al borde del tablero verde para alertas de pase. */
+const PASS_ANCHOR_INSET = 40;
+
 /** Asigna posición en mesa según asiento relativo al jugador actual. */
 function seatPosition(relativeOffset: number, playerCount: number): SeatPosition {
   if (playerCount === 2) return relativeOffset === 0 ? "bottom" : "top";
@@ -113,6 +116,40 @@ export function GameTable({ state, members, myHand, currentUserId, matchAction, 
 
   const teams = Object.keys(state.teamScores).map(Number).sort();
 
+  const getPassAnchor = React.useCallback(
+    (position: SeatPosition): { x: number; y: number } | null => {
+      const board = boardViewRef.current?.getBoardElement();
+      const table = tableAreaRef.current;
+      if (!board || !table) return null;
+
+      const br = board.getBoundingClientRect();
+      const tr = table.getBoundingClientRect();
+      switch (position) {
+        case "top":
+          return {
+            x: br.left - tr.left + br.width / 2,
+            y: br.top - tr.top + PASS_ANCHOR_INSET,
+          };
+        case "bottom":
+          return {
+            x: br.left - tr.left + br.width / 2,
+            y: br.bottom - tr.top - PASS_ANCHOR_INSET,
+          };
+        case "left":
+          return {
+            x: (br.left - tr.left) * 1.3 + PASS_ANCHOR_INSET,
+            y: br.top - tr.top + br.height / 2,
+          };
+        case "right":
+          return {
+            x: (br.right - tr.left) / 1.02 - PASS_ANCHOR_INSET,
+            y: br.top - tr.top + br.height / 2,
+          };
+      }
+    },
+    [],
+  );
+
   return (
     <div className="flex w-full flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/60 px-4 py-2">
@@ -151,6 +188,7 @@ export function GameTable({ state, members, myHand, currentUserId, matchAction, 
           mySeat={mySeat}
           playerCount={playerCount}
           playerSeats={playerSeats}
+          getPassAnchor={getPassAnchor}
         />
 
         <div className="grid w-full grid-cols-1 gap-3 lg:grid-cols-[7.5rem_1fr_7.5rem] lg:grid-rows-[auto_1fr_auto]">
@@ -243,7 +281,7 @@ export function GameTable({ state, members, myHand, currentUserId, matchAction, 
                 />
               </div>
             )}
-            <div ref={handAreaRef}>
+            <div ref={handAreaRef} className="overflow-visible">
             <HandView
               tiles={myHand.tiles}
               legalMoves={myHand.legalMoves}
