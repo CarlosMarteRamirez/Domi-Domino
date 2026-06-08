@@ -63,7 +63,7 @@ function DealAnimation({
   playerCount: number;
 }) {
   const seatList = DEAL_SEATS[playerCount] ?? DEAL_SEATS[4];
-  const tileDuration = Math.min(650, Math.floor(duration / (seatList.length * TILES_PER_SEAT + 2)));
+  const tileDuration = Math.min(900, Math.floor(duration / (seatList.length * TILES_PER_SEAT + 2)));
   const stagger = Math.floor((duration - tileDuration) / (seatList.length * TILES_PER_SEAT));
 
   return (
@@ -153,7 +153,7 @@ export function MatchAnimationLayer({
     return null;
   }
 
-  if (action.type === "pass") {
+  if (action.type === "pass" || action.type === "passBonus") {
     const seat = playerSeatPosition(
       action.playerId,
       currentUserId,
@@ -162,6 +162,10 @@ export function MatchAnimationLayer({
       playerSeats,
     );
     const pos = ORIGIN[seat];
+    const duration =
+      action.type === "pass" ? MATCH_ANIM_MS.pass : MATCH_ANIM_MS.passBonus;
+    const isBonus = action.type === "passBonus";
+
     return (
       <div className="pointer-events-none absolute inset-0 z-30">
         <div
@@ -171,13 +175,38 @@ export function MatchAnimationLayer({
               left: pos.x,
               top: pos.y,
               transform: "translate(-50%, -50%)",
-              "--pass-duration": `${MATCH_ANIM_MS.pass}ms`,
+              "--pass-duration": `${duration}ms`,
             } as React.CSSProperties
           }
         >
-          <div className="rounded-full border border-amber-400/60 bg-amber-500/20 px-4 py-2 text-center shadow-lg backdrop-blur-sm">
-            <p className="text-xs font-semibold text-amber-200">{action.displayName}</p>
-            <p className="text-sm font-bold text-amber-100">Pasa 🃏</p>
+          <div
+            className={cn(
+              "rounded-full px-4 py-2 text-center shadow-lg backdrop-blur-sm",
+              isBonus
+                ? "border border-emerald-400/50 bg-emerald-500/15"
+                : "border border-amber-400/60 bg-amber-500/20",
+            )}
+          >
+            <p
+              className={cn(
+                "text-xs font-semibold",
+                isBonus ? "text-emerald-200/90" : "text-amber-200",
+              )}
+            >
+              {action.displayName}
+            </p>
+            {isBonus ? (
+              <>
+                <p className="text-sm font-bold text-emerald-100">
+                  +{action.amount} puntos
+                </p>
+                <p className="text-[10px] text-emerald-200/70">
+                  Eq. {action.teamIndex + 1} · todos pasaron
+                </p>
+              </>
+            ) : (
+              <p className="text-sm font-bold text-amber-100">Pasa 🃏</p>
+            )}
           </div>
         </div>
       </div>

@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/infrastructure/auth/auth";
-import { createRoom, type CreateRoomInput } from "@/application/rooms";
+import { createRoom, listPublicRooms, type CreateRoomInput } from "@/application/rooms";
+
+export async function listPublicRoomsAction() {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("No autenticado");
+  return listPublicRooms();
+}
 
 export async function createRoomAction(input: CreateRoomInput) {
   const session = await auth();

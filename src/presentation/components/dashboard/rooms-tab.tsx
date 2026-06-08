@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Users, Target, Crown } from "lucide-react";
+import { Users, Target, Crown, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/presentation/components/ui/card";
 import { Button } from "@/presentation/components/ui/button";
 import { Badge } from "@/presentation/components/ui/badge";
@@ -13,12 +13,44 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/presentation/components/ui/select";
+import { listPublicRoomsAction } from "@/presentation/actions/room-actions";
 import type { PublicRoom } from "./types";
 
-export function RoomsTab({ rooms }: { rooms: PublicRoom[] }) {
+export function RoomsTab({
+  initialRooms,
+  refreshKey,
+}: {
+  initialRooms: PublicRoom[];
+  refreshKey: number;
+}) {
+  const [rooms, setRooms] = React.useState(initialRooms);
+  const [refreshing, setRefreshing] = React.useState(false);
   const [target, setTarget] = React.useState<string>("all");
   const [players, setPlayers] = React.useState<string>("all");
   const [mode, setMode] = React.useState<string>("all");
+
+  React.useEffect(() => {
+    setRooms(initialRooms);
+  }, [initialRooms]);
+
+  React.useEffect(() => {
+    if (refreshKey === 0) return;
+    let cancelled = false;
+    setRefreshing(true);
+    listPublicRoomsAction()
+      .then((next) => {
+        if (!cancelled) setRooms(next);
+      })
+      .catch(() => {
+        /* mantener listado actual si falla */
+      })
+      .finally(() => {
+        if (!cancelled) setRefreshing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
 
   const filtered = rooms.filter(
     (r) =>
@@ -29,6 +61,12 @@ export function RoomsTab({ rooms }: { rooms: PublicRoom[] }) {
 
   return (
     <div className="space-y-4">
+      {refreshing && (
+        <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Actualizando salas…
+        </p>
+      )}
       <div className="grid grid-cols-3 gap-2">
         <Select value={target} onValueChange={setTarget}>
           <SelectTrigger><SelectValue placeholder="Objetivo" /></SelectTrigger>

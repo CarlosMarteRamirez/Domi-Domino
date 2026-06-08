@@ -488,6 +488,14 @@ export class RoomManager {
   private async passImpl(code: string, userId: string) {
     const room = this.rooms.get(code);
     if (!room?.engine) return;
+
+    this.emitAction(room, {
+      type: "pass",
+      playerId: userId,
+      displayName: this.memberName(room, userId),
+    });
+    await sleep(MATCH_ANIM_MS.pass);
+
     const result = room.engine.pass(userId);
     if (!result.ok) return this.error(result.error.code, result.error.message, userId);
     await this.afterMove(room, result.value.events);
@@ -538,10 +546,14 @@ export class RoomManager {
 
     for (const ev of events) {
       if (ev.type === "passBonus") {
-        this.io.to(roomKey(room.code)).emit("match:event", {
+        this.emitAction(room, {
           type: "passBonus",
-          message: `Bono de pase completo (+${ev.amount}) para el equipo ${(ev.teamIndex as number) + 1}`,
+          playerId: ev.playerId as string,
+          displayName: this.memberName(room, ev.playerId as string),
+          teamIndex: ev.teamIndex as number,
+          amount: ev.amount as number,
         });
+        await sleep(MATCH_ANIM_MS.passBonus);
       }
       if (ev.type === "roundEnded") {
         roundJustEnded = true;

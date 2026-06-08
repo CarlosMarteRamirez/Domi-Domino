@@ -69,6 +69,13 @@ export interface MatchSyncDto {
 export type MatchActionDto =
   | { type: "play"; playerId: string; displayName: string; tile: string; side: Side }
   | { type: "pass"; playerId: string; displayName: string }
+  | {
+      type: "passBonus";
+      playerId: string;
+      displayName: string;
+      teamIndex: number;
+      amount: number;
+    }
   | { type: "deal"; roundIndex: number }
   | {
       type: "roundEnd";
@@ -81,8 +88,9 @@ export type MatchActionDto =
 /** Duración de animaciones en cliente (debe coincidir con el servidor). */
 export const MATCH_ANIM_MS = {
   play: 700,
-  pass: 1000,
-  deal: 1500,
+  pass: 1800,
+  passBonus: 2200,
+  deal: 2800,
   roundEnd: 1400,
   matchEnd: 2500,
 } as const;

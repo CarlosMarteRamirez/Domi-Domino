@@ -32,6 +32,8 @@ function actionDuration(action: MatchActionDto): number {
       return MATCH_ANIM_MS.play;
     case "pass":
       return MATCH_ANIM_MS.pass;
+    case "passBonus":
+      return MATCH_ANIM_MS.passBonus;
     case "deal":
       return MATCH_ANIM_MS.deal;
     case "roundEnd":

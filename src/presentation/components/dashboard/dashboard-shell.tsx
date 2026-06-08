@@ -65,6 +65,8 @@ export function DashboardShell({
 }: Props) {
   const initials = (user.displayName || user.username).slice(0, 2).toUpperCase();
   const [profileOpen, setProfileOpen] = React.useState(false);
+  const [tab, setTab] = React.useState("home");
+  const [roomsRefreshKey, setRoomsRefreshKey] = React.useState(0);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
@@ -103,7 +105,13 @@ export function DashboardShell({
         </DialogContent>
       </Dialog>
 
-      <Tabs defaultValue="home">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          setTab(value);
+          if (value === "rooms") setRoomsRefreshKey((k) => k + 1);
+        }}
+      >
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="home">
             <Home className="mr-1 h-4 w-4" /> Inicio
@@ -116,7 +124,12 @@ export function DashboardShell({
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="rooms">
+          <TabsTrigger
+            value="rooms"
+            onClick={() => {
+              if (tab === "rooms") setRoomsRefreshKey((k) => k + 1);
+            }}
+          >
             <ListChecks className="mr-1 h-4 w-4" /> Salas
           </TabsTrigger>
           <TabsTrigger value="create">
@@ -135,7 +148,7 @@ export function DashboardShell({
           />
         </TabsContent>
         <TabsContent value="rooms">
-          <RoomsTab rooms={rooms} />
+          <RoomsTab initialRooms={rooms} refreshKey={roomsRefreshKey} />
         </TabsContent>
         <TabsContent value="create">
           <CreateRoomTab />
