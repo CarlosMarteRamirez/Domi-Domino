@@ -170,6 +170,9 @@ export class RoomManager {
   private async joinImpl(code: string, user: { id: string; username: string }) {
     const room = await this.hydrate(code);
     if (!room) return this.error("ROOM_NOT_FOUND", "La sala no existe", user.id);
+    if (room.status === "FINISHED") {
+      return this.error("ROOM_CLOSED", "Esta sala ya no está disponible", user.id);
+    }
 
     let member = room.members.get(user.id);
     if (!member) {
@@ -214,8 +217,36 @@ export class RoomManager {
     const room = this.rooms.get(code);
     const member = room?.members.get(userId);
     if (!room || !member) return;
+
     member.connections = Math.max(0, member.connections - 1);
+    const isHost = userId === room.hostId;
+    const hostFullyLeft = isHost && member.connections === 0;
+
+    if (hostFullyLeft && room.status === "LOBBY") {
+      await this.closeLobbyRoom(room, "El anfitrión abandonó la sala");
+      return;
+    }
+
     this.broadcastLobby(room);
+
+    if (hostFullyLeft && room.status === "IN_GAME") {
+      this.io.to(roomKey(room.code)).emit("match:event", {
+        type: "hostDisconnected",
+        message: "El anfitrión se desconectó. La partida continuará cuando vuelva a conectarse.",
+      });
+    }
+  }
+
+  /** Cierra una sala en lobby: persiste FINISHED, limpia miembros y saca del listado público. */
+  private async closeLobbyRoom(room: RoomRuntime, reason: string) {
+    room.status = "FINISHED";
+    await prisma.room.update({
+      where: { id: room.roomId },
+      data: { status: "FINISHED" },
+    });
+    await prisma.roomMember.deleteMany({ where: { roomId: room.roomId } });
+    this.io.to(roomKey(room.code)).emit("room:closed", { reason });
+    this.rooms.delete(room.code);
   }
 
   setReady(code: string, userId: string, ready: boolean) {

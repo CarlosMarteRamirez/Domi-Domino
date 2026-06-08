@@ -20,8 +20,9 @@ export async function searchUsersAction(query: string) {
 }
 
 export async function sendFriendRequestAction(addresseeId: string) {
-  await sendFriendRequest(await userId(), addresseeId);
+  const result = await sendFriendRequest(await userId(), addresseeId);
   revalidatePath("/dashboard");
+  return { status: result.status };
 }
 
 export async function respondFriendRequestAction(friendshipId: string, accept: boolean) {

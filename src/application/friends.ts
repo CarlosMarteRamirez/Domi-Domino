@@ -29,14 +29,18 @@ export async function sendFriendRequest(requesterId: string, addresseeId: string
   });
   if (existing) {
     if (existing.status === "ACCEPTED") throw new Error("Ya son amigos");
-    if (existing.status === "PENDING") throw new Error("Ya hay una solicitud pendiente");
+    if (existing.status === "PENDING") {
+      if (existing.requesterId === requesterId) return { status: "alreadySent" as const };
+      return { status: "incomingPending" as const };
+    }
   }
 
-  return prisma.friendship.upsert({
+  await prisma.friendship.upsert({
     where: { requesterId_addresseeId: { requesterId, addresseeId } },
     create: { requesterId, addresseeId, status: "PENDING" },
     update: { status: "PENDING" },
   });
+  return { status: "sent" as const };
 }
 
 export async function respondFriendRequest(
@@ -89,4 +93,13 @@ export async function listPendingRequests(userId: string) {
     orderBy: { createdAt: "desc" },
   });
   return requests.map((r) => ({ friendshipId: r.id, user: r.requester }));
+}
+
+/** IDs de usuarios a los que yo ya les envié solicitud pendiente. */
+export async function listOutgoingPendingUserIds(userId: string) {
+  const rows = await prisma.friendship.findMany({
+    where: { requesterId: userId, status: "PENDING" },
+    select: { addresseeId: true },
+  });
+  return rows.map((r) => r.addresseeId);
 }

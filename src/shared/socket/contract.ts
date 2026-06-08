@@ -58,6 +58,7 @@ export interface ClientToServerEvents {
 /** Events emitted by the server to clients. */
 export interface ServerToClientEvents {
   "room:state": (state: LobbyState) => void;
+  "room:closed": (payload: { reason: string }) => void;
   "room:error": (payload: { code: string; message: string }) => void;
   "presence:update": (payload: { userId: string; status: PresenceStatus }) => void;
   "match:state": (state: MatchState) => void;

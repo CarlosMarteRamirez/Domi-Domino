@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Trophy } from "lucide-react";
 import { useSocket } from "@/presentation/hooks/use-socket";
 import { LobbyView } from "./lobby-view";
@@ -23,6 +24,7 @@ interface Props {
 }
 
 export function RoomClient({ code, currentUserId }: Props) {
+  const router = useRouter();
   const { socket, connected } = useSocket();
   const [lobby, setLobby] = React.useState<LobbyState | null>(null);
   const [match, setMatch] = React.useState<MatchState | null>(null);
@@ -55,7 +57,16 @@ export function RoomClient({ code, currentUserId }: Props) {
       setMessages((prev) => [...prev, msg]);
       if (msg.userId !== currentUserId) setUnread((u) => u + 1);
     });
-    socket.on("room:error", ({ message }) => {
+    socket.on("room:closed", ({ reason }) => {
+      setError(reason);
+      setTimeout(() => router.push("/dashboard"), 2500);
+    });
+    socket.on("room:error", ({ code: errCode, message }) => {
+      if (errCode === "ROOM_CLOSED") {
+        setError(message);
+        setTimeout(() => router.push("/dashboard"), 2500);
+        return;
+      }
       setError(message);
       setTimeout(() => setError(null), 4000);
     });
@@ -63,6 +74,7 @@ export function RoomClient({ code, currentUserId }: Props) {
     return () => {
       socket.emit("room:leave", { code });
       socket.off("room:state");
+      socket.off("room:closed");
       socket.off("match:state");
       socket.off("match:yourHand");
       socket.off("match:event");

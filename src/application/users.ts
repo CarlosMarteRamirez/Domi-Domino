@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/infrastructure/db/prisma/client";
-import { hashPassword } from "@/infrastructure/auth/password";
+import { hashPassword, verifyPassword } from "@/infrastructure/auth/password";
 
 export const registerSchema = z.object({
   username: z
@@ -41,6 +41,97 @@ export async function registerUser(input: RegisterInput) {
   });
 
   return { id: user.id, username: user.username };
+}
+
+export async function getProfileAccount(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return null;
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    email: user.email,
+    image: user.image,
+    hasPassword: Boolean(user.passwordHash),
+  };
+}
+
+export const updateProfileSchema = z
+  .object({
+    username: z
+      .string()
+      .min(3)
+      .max(20)
+      .regex(/^[a-zA-Z0-9_]+$/, "Solo letras, numeros y guion bajo"),
+    displayName: z.string().min(2).max(40),
+    email: z.string().email(),
+    image: z
+      .string()
+      .url("Debe ser una URL valida")
+      .max(500)
+      .optional()
+      .or(z.literal("")),
+    currentPassword: z.string().optional().or(z.literal("")),
+    newPassword: z.string().min(8).max(72).optional().or(z.literal("")),
+  })
+  .refine((d) => !d.newPassword || Boolean(d.currentPassword), {
+    message: "Indica tu contraseña actual para cambiarla",
+    path: ["currentPassword"],
+  });
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+
+export async function updateUserProfile(userId: string, input: UpdateProfileInput) {
+  const data = updateProfileSchema.parse(input);
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new Error("Usuario no encontrado");
+
+  // username/email must remain unique across other users.
+  const clash = await prisma.user.findFirst({
+    where: {
+      id: { not: userId },
+      OR: [{ email: data.email }, { username: data.username }],
+    },
+  });
+  if (clash) {
+    throw new Error(
+      clash.email === data.email
+        ? "Ese email ya está en uso por otra cuenta"
+        : "Ese nombre de usuario ya está en uso",
+    );
+  }
+
+  let passwordHash: string | undefined;
+  if (data.newPassword) {
+    if (!user.passwordHash) {
+      // Account created via OAuth without a password: allow setting one.
+      passwordHash = await hashPassword(data.newPassword);
+    } else {
+      const valid = await verifyPassword(data.currentPassword ?? "", user.passwordHash);
+      if (!valid) throw new Error("La contraseña actual es incorrecta");
+      passwordHash = await hashPassword(data.newPassword);
+    }
+  }
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      username: data.username,
+      displayName: data.displayName,
+      email: data.email,
+      image: data.image ? data.image : null,
+      ...(passwordHash ? { passwordHash } : {}),
+    },
+  });
+
+  return {
+    id: updated.id,
+    username: updated.username,
+    displayName: updated.displayName,
+    email: updated.email,
+    image: updated.image,
+  };
 }
 
 export async function getProfileStats(userId: string) {

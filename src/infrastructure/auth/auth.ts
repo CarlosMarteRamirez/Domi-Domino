@@ -58,17 +58,21 @@ export const authConfig: NextAuthConfig = {
   pages: { signIn: "/login" },
   providers,
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
         // username may be present on credentials sign-in; otherwise look it up.
         token.username = (user as { username?: string }).username;
       }
-      if (token.id && !token.username) {
+      // Re-read from DB on first login (missing username) or after a profile update.
+      if (token.id && (!token.username || trigger === "update")) {
         const db = await prisma.user.findUnique({ where: { id: token.id as string } });
-        token.username = db?.username;
-        token.picture = db?.image ?? token.picture;
-        token.name = db?.displayName ?? token.name;
+        if (db) {
+          token.username = db.username;
+          token.picture = db.image ?? null;
+          token.name = db.displayName;
+          token.email = db.email;
+        }
       }
       return token;
     },

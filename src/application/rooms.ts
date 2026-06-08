@@ -49,10 +49,32 @@ export interface PublicRoomFilters {
   blockMode?: "individual" | "parejas";
 }
 
+/**
+ * Al arrancar el servidor no existe ningún runtime en memoria ni sockets
+ * conectados, así que cualquier sala que siga en LOBBY o IN_GAME quedó
+ * huérfana (el estado de partida vive solo en memoria y se perdió). Las
+ * cerramos y limpiamos sus miembros para que no aparezcan en el listado.
+ */
+export async function closeOrphanRoomsOnStartup() {
+  const orphans = await prisma.room.findMany({
+    where: { status: { in: ["LOBBY", "IN_GAME"] } },
+    select: { id: true },
+  });
+  if (orphans.length === 0) return;
+  const ids = orphans.map((r) => r.id);
+  await prisma.roomMember.deleteMany({ where: { roomId: { in: ids } } });
+  await prisma.room.updateMany({
+    where: { id: { in: ids } },
+    data: { status: "FINISHED" },
+  });
+}
+
 export async function listPublicRooms(filters: PublicRoomFilters = {}) {
   const where: Prisma.RoomWhereInput = {
     visibility: "PUBLIC",
     status: { in: ["LOBBY", "IN_GAME"] },
+    // No mostrar salas sin jugadores (anfitrión salió / quedaron vacías).
+    members: { some: {} },
   };
   if (filters.targetScore) where.targetScore = filters.targetScore;
   if (filters.maxPlayers) where.maxPlayers = filters.maxPlayers;

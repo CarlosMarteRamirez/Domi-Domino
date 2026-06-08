@@ -4,6 +4,7 @@ import type {
   ServerToClientEvents,
   SocketData,
 } from "@/shared/socket/contract";
+import { closeOrphanRoomsOnStartup } from "@/application/rooms";
 import { verifySocketToken } from "@/infrastructure/realtime/token";
 import { RoomManager } from "@/infrastructure/realtime/room-manager";
 
@@ -18,6 +19,9 @@ export type AppServer = Server<
 type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
 
 export function registerGateway(io: AppServer, authSecret: string) {
+  closeOrphanRoomsOnStartup().catch((err) =>
+    console.error("Error cerrando salas huérfanas:", err),
+  );
   const manager = new RoomManager(io);
 
   io.use((socket, next) => {

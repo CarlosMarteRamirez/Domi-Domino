@@ -5,6 +5,15 @@ export interface DashboardUser {
   image: string | null;
 }
 
+export interface ProfileAccount {
+  id: string;
+  username: string;
+  displayName: string;
+  email: string;
+  image: string | null;
+  hasPassword: boolean;
+}
+
 export interface ProfileStats {
   id: string;
   username: string;
