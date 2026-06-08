@@ -3,7 +3,7 @@
 import * as React from "react";
 import { cn } from "@/presentation/lib/utils";
 
-// Pip positions on a 3x3 grid for each value 0-6.
+// Pip positions on a 3x3 grid (valores 0–5). El 6 usa rejilla distinta según orientación.
 const PIP_LAYOUT: Record<number, number[]> = {
   0: [],
   1: [4],
@@ -11,16 +11,39 @@ const PIP_LAYOUT: Record<number, number[]> = {
   3: [0, 4, 8],
   4: [0, 2, 6, 8],
   5: [0, 2, 4, 6, 8],
-  6: [0, 2, 3, 5, 6, 8],
 };
 
-function Half({ value, vertical }: { value: number; vertical?: boolean }) {
+function Pip({ className }: { className?: string }) {
+  return <span className={cn("block h-1.5 w-1.5 rounded-full bg-slate-900", className)} />;
+}
+
+function HalfSix({ tileHorizontal }: { tileHorizontal: boolean }) {
+  // Ficha vertical → 2×3  |  Ficha horizontal → 3×2
+  return (
+    <div
+      className={cn(
+        "grid h-full w-full gap-0.5 p-1",
+        tileHorizontal ? "grid-cols-3 grid-rows-2" : "grid-cols-2 grid-rows-3",
+      )}
+    >
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="flex items-center justify-center">
+          <Pip />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Half({ value, tileHorizontal }: { value: number; tileHorizontal: boolean }) {
+  if (value === 6) return <HalfSix tileHorizontal={tileHorizontal} />;
+
   const active = new Set(PIP_LAYOUT[value] ?? []);
   return (
-    <div className={cn("grid h-full w-full grid-cols-3 grid-rows-3 gap-0.5 p-1", vertical && "")}>
+    <div className="grid h-full w-full grid-cols-3 grid-rows-3 gap-0.5 p-1">
       {Array.from({ length: 9 }).map((_, i) => (
         <div key={i} className="flex items-center justify-center">
-          {active.has(i) && <span className="block h-1.5 w-1.5 rounded-full bg-slate-900" />}
+          {active.has(i) && <Pip />}
         </div>
       ))}
     </div>
@@ -72,10 +95,10 @@ export function DominoTile({
       aria-label={`Ficha ${low}-${high}`}
     >
       <div className={cn("flex-1", horizontal ? "border-r border-slate-400" : "border-b border-slate-400")}>
-        <Half value={high} />
+        <Half value={high} tileHorizontal={horizontal} />
       </div>
       <div className="flex-1">
-        <Half value={low} />
+        <Half value={low} tileHorizontal={horizontal} />
       </div>
     </button>
   );

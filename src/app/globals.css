@@ -110,18 +110,48 @@ body {
   }
 }
 
-@keyframes deal-burst {
-  0% {
-    opacity: 0;
-    transform: scale(0.3) rotate(0deg);
-  }
-  40% {
+@keyframes deal-deck-pulse {
+  0%,
+  100% {
     opacity: 1;
-    transform: scale(1.1) rotate(8deg);
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+}
+
+@keyframes deal-deck-layer {
+  0% {
+    opacity: 1;
+    transform: translate(var(--layer-x, 0), var(--layer-y, 0)) scale(1);
   }
   100% {
     opacity: 0;
-    transform: scale(1.6) rotate(20deg) translateY(-40px);
+    transform: translate(calc(var(--layer-x, 0) * 2), calc(var(--layer-y, 0) - 18px)) scale(0.7);
+  }
+}
+
+@keyframes deal-to-seat {
+  0% {
+    opacity: 0;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0.5) rotate(-12deg);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    left: var(--deal-to-x, 50%);
+    top: var(--deal-to-y, 50%);
+    transform: translate(-50%, -50%) scale(0.75) rotate(6deg);
   }
 }
 
@@ -213,8 +243,16 @@ body {
   animation: domino-land 450ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
-.animate-deal-burst {
-  animation: deal-burst 1.2s ease-out forwards;
+.animate-deal-deck-pulse {
+  animation: deal-deck-pulse var(--deal-duration, 1500ms) ease-in-out forwards;
+}
+
+.animate-deal-deck-layer {
+  animation: deal-deck-layer var(--deal-duration, 1500ms) ease-in forwards;
+}
+
+.animate-deal-to-seat {
+  animation: deal-to-seat var(--deal-tile-duration, 700ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .animate-pass-float {

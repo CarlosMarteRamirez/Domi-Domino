@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { MatchActionDto } from "@/shared/socket/contract";
 import { MATCH_ANIM_MS } from "@/shared/socket/contract";
+import { cn } from "@/presentation/lib/utils";
 
 type SeatPosition = "top" | "bottom" | "left" | "right";
 
@@ -26,6 +27,110 @@ const ORIGIN: Record<SeatPosition, { x: string; y: string }> = {
   left: { x: "12%", y: "48%" },
   right: { x: "88%", y: "48%" },
 };
+
+const DEAL_SEATS: Record<number, SeatPosition[]> = {
+  2: ["bottom", "top"],
+  4: ["bottom", "right", "top", "left"],
+};
+
+const TILES_PER_SEAT = 5;
+
+function FaceDownDealTile({
+  className,
+  style,
+}: {
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-sm bg-gradient-to-br from-slate-100 to-slate-300 shadow-md ring-1 ring-black/20",
+        className,
+      )}
+      style={style}
+    />
+  );
+}
+
+function DealAnimation({
+  roundIndex,
+  duration,
+  playerCount,
+}: {
+  roundIndex: number;
+  duration: number;
+  playerCount: number;
+}) {
+  const seatList = DEAL_SEATS[playerCount] ?? DEAL_SEATS[4];
+  const tileDuration = Math.min(650, Math.floor(duration / (seatList.length * TILES_PER_SEAT + 2)));
+  const stagger = Math.floor((duration - tileDuration) / (seatList.length * TILES_PER_SEAT));
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-30">
+      <div
+        className="absolute inset-0 bg-domino-blue/20 backdrop-blur-[1px]"
+        style={{ animation: `results-backdrop 300ms ease-out forwards` }}
+      />
+
+      {/* Mazo central */}
+      <div
+        className="absolute left-1/2 top-1/2 animate-deal-deck-pulse"
+        style={{ "--deal-duration": `${duration}ms` } as React.CSSProperties}
+      >
+        {Array.from({ length: 6 }).map((_, i) => (
+          <FaceDownDealTile
+            key={i}
+            className="absolute left-1/2 top-1/2 h-9 w-6 animate-deal-deck-layer"
+            style={
+              {
+                "--layer-x": `${i * 2}px`,
+                "--layer-y": `${-i * 2}px`,
+                "--deal-duration": `${duration * 0.85}ms`,
+                animationDelay: `${i * 60}ms`,
+                marginLeft: -12,
+                marginTop: -18,
+              } as React.CSSProperties
+            }
+          />
+        ))}
+      </div>
+
+      {/* Fichas hacia cada jugador */}
+      {seatList.flatMap((seat, seatIdx) =>
+        Array.from({ length: TILES_PER_SEAT }).map((_, tileIdx) => {
+          const pos = ORIGIN[seat];
+          const delay = (seatIdx * TILES_PER_SEAT + tileIdx) * stagger;
+          return (
+            <FaceDownDealTile
+              key={`${seat}-${tileIdx}`}
+              className="absolute h-8 w-5 animate-deal-to-seat"
+              style={
+                {
+                  "--deal-to-x": pos.x,
+                  "--deal-to-y": pos.y,
+                  "--deal-tile-duration": `${tileDuration}ms`,
+                  animationDelay: `${delay}ms`,
+                } as React.CSSProperties
+              }
+            />
+          );
+        }),
+      )}
+
+      <div
+        className="absolute left-1/2 top-[62%] -translate-x-1/2 animate-round-banner"
+        style={{ "--round-duration": `${duration}ms` } as React.CSSProperties}
+      >
+        <div className="rounded-full border border-domino-blue-light/40 bg-domino-blue/70 px-5 py-2 shadow-lg backdrop-blur-sm">
+          <p className="text-center text-sm font-semibold text-domino-cream">
+            Ronda {roundIndex + 1}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   action: MatchActionDto | null;
@@ -81,26 +186,11 @@ export function MatchAnimationLayer({
 
   if (action.type === "deal") {
     return (
-      <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
-        <div className="relative h-full w-full">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <div
-              key={i}
-              className="absolute left-1/2 top-1/2 h-8 w-5 animate-deal-burst rounded-sm bg-slate-100 shadow-md ring-1 ring-black/20"
-              style={{
-                animationDelay: `${i * 80}ms`,
-                transform: `translate(-50%, -50%) rotate(${i * 30}deg) translateX(${40 + i * 8}px)`,
-              }}
-            />
-          ))}
-          <p
-            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-lg font-bold text-domino-cream drop-shadow-lg"
-            style={{ animation: `round-banner ${MATCH_ANIM_MS.deal}ms ease-out forwards` }}
-          >
-            Repartiendo fichas…
-          </p>
-        </div>
-      </div>
+      <DealAnimation
+        roundIndex={action.roundIndex}
+        duration={MATCH_ANIM_MS.deal}
+        playerCount={playerCount}
+      />
     );
   }
 
