@@ -139,6 +139,9 @@ export function RoomClient({ code, currentUserId }: Props) {
     if (socket.connected) joinRoom();
 
     return () => {
+      if (socket.connected && joinedRef.current) {
+        socket.emit("room:leave", { code });
+      }
       socket.off("room:state", onRoomState);
       socket.off("match:sync", onMatchSync);
       socket.off("match:action", onMatchAction);
