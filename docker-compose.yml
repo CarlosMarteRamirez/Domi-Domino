@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: domino-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: domino
+      POSTGRES_PASSWORD: domino
+      POSTGRES_DB: domino
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - domino-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U domino"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  domino-pgdata:
