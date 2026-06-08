@@ -45,7 +45,7 @@ function FaceDownDealTile({
   return (
     <div
       className={cn(
-        "rounded-sm bg-gradient-to-br from-slate-100 to-slate-300 shadow-md ring-1 ring-black/20",
+        "rounded-sm bg-linear-to-br from-slate-100 to-slate-300 shadow-md ring-1 ring-black/20",
         className,
       )}
       style={style}
