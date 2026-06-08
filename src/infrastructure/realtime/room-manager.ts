@@ -7,9 +7,13 @@ import type {
   ClientToServerEvents,
   LobbyMember,
   LobbyState,
+  MatchActionDto,
   ServerToClientEvents,
   SocketData,
 } from "@/shared/socket/contract";
+import { MATCH_ANIM_MS } from "@/shared/socket/contract";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type IO = Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
 
@@ -147,27 +151,77 @@ export class RoomManager {
     this.io.to(roomKey(room.code)).emit("room:state", this.lobbyState(room));
   }
 
+  private handDto(room: RoomRuntime, userId: string) {
+    return {
+      tiles: room.engine!.handTilesOf(userId),
+      legalMoves: room.engine!.legalMovesOf(userId),
+    };
+  }
+
+  private emitAction(room: RoomRuntime, action: MatchActionDto) {
+    this.io.to(roomKey(room.code)).emit("match:action", action);
+  }
+
+  /** Envía estado público + mano privada en un solo evento por jugador. */
   private broadcastMatch(room: RoomRuntime) {
     if (!room.engine) return;
     const state = room.engine.snapshot();
-    this.io.to(roomKey(room.code)).emit("match:state", state);
     for (const member of room.members.values()) {
-      this.io.to(userKey(member.userId)).emit("match:yourHand", {
-        tiles: room.engine.handTilesOf(member.userId),
-        legalMoves: room.engine.legalMovesOf(member.userId),
+      this.io.to(userKey(member.userId)).emit("match:sync", {
+        state,
+        hand: this.handDto(room, member.userId),
       });
     }
+  }
+
+  /** Sincronización directa al socket que acaba de unirse (no depende del broadcast). */
+  private emitPlayerSync(room: RoomRuntime, userId: string, socketId: string) {
+    const socket = this.io.sockets.sockets.get(socketId);
+    if (!socket) return;
+    socket.emit("room:state", this.lobbyState(room));
+    if (room.status === "IN_GAME" && room.engine) {
+      socket.emit("match:sync", {
+        state: room.engine.snapshot(),
+        hand: this.handDto(room, userId),
+      });
+    }
+  }
+
+  private async emitChatHistory(room: RoomRuntime, socketId: string) {
+    const rows = await prisma.chatMessage.findMany({
+      where: { roomId: room.roomId },
+      orderBy: { createdAt: "desc" },
+      take: 80,
+      include: { user: { select: { username: true, displayName: true } } },
+    });
+    const socket = this.io.sockets.sockets.get(socketId);
+    if (!socket) return;
+    socket.emit(
+      "chat:history",
+      [...rows].reverse().map((m) => ({
+        id: m.id,
+        userId: m.userId,
+        username: m.user.username,
+        displayName: m.user.displayName,
+        content: m.content,
+        createdAt: m.createdAt.toISOString(),
+      })),
+    );
   }
 
   private error(code: string, message: string, userId: string) {
     this.io.to(userKey(userId)).emit("room:error", { code, message });
   }
 
-  join(code: string, user: { id: string; username: string }) {
-    return this.runLocked(code, () => this.joinImpl(code, user));
+  join(code: string, user: { id: string; username: string }, socketId: string) {
+    return this.runLocked(code, () => this.joinImpl(code, user, socketId));
   }
 
-  private async joinImpl(code: string, user: { id: string; username: string }) {
+  private async joinImpl(
+    code: string,
+    user: { id: string; username: string },
+    socketId: string,
+  ) {
     const room = await this.hydrate(code);
     if (!room) return this.error("ROOM_NOT_FOUND", "La sala no existe", user.id);
     if (room.status === "FINISHED") {
@@ -205,6 +259,10 @@ export class RoomManager {
       room.members.set(user.id, member);
     }
     member.connections += 1;
+    // Sync directo al socket que se unió (evita perder eventos por timing).
+    await this.emitChatHistory(room, socketId);
+    this.emitPlayerSync(room, user.id, socketId);
+    // Actualiza a los demás (presencia, lobby, etc.).
     this.broadcastLobby(room);
     if (room.status === "IN_GAME") this.broadcastMatch(room);
   }
@@ -398,7 +456,7 @@ export class RoomManager {
 
     room.engine.startRound();
     this.broadcastLobby(room);
-    this.broadcastMatch(room);
+    await this.dealAndSync(room);
   }
 
   playTile(code: string, userId: string, tile: string, side: Side) {
@@ -410,6 +468,16 @@ export class RoomManager {
     if (!room?.engine) return;
     const result = room.engine.playTile(userId, tile, side);
     if (!result.ok) return this.error(result.error.code, result.error.message, userId);
+
+    const member = room.members.get(userId);
+    this.emitAction(room, {
+      type: "play",
+      playerId: userId,
+      displayName: member?.displayName ?? "Jugador",
+      tile,
+      side,
+    });
+    await sleep(MATCH_ANIM_MS.play);
     await this.afterMove(room, result.value.events);
   }
 
@@ -425,11 +493,49 @@ export class RoomManager {
     await this.afterMove(room, result.value.events);
   }
 
+  private memberName(room: RoomRuntime, userId: string) {
+    return room.members.get(userId)?.displayName ?? "Jugador";
+  }
+
+  /** Reparte fichas con animación y sincroniza estado. */
+  private async dealAndSync(room: RoomRuntime) {
+    const roundIndex = room.engine!.snapshot().roundIndex;
+    this.emitAction(room, { type: "deal", roundIndex });
+    await sleep(MATCH_ANIM_MS.deal);
+    this.broadcastMatch(room);
+    await this.runAutoPassChain(room);
+  }
+
+  /** Pasa automáticamente si el jugador en turno no tiene jugadas legales. */
+  private async runAutoPassChain(room: RoomRuntime) {
+    const engine = room.engine;
+    if (!engine) return;
+
+    const snap = engine.snapshot();
+    if (snap.finished || !snap.currentPlayerId) return;
+
+    const currentId = snap.currentPlayerId;
+    if (engine.legalMovesOf(currentId).length > 0) return;
+
+    this.emitAction(room, {
+      type: "pass",
+      playerId: currentId,
+      displayName: this.memberName(room, currentId),
+    });
+    await sleep(MATCH_ANIM_MS.pass);
+
+    const result = engine.pass(currentId);
+    if (!result.ok) return;
+    await this.afterMove(room, result.value.events);
+  }
+
   private async afterMove(
     room: RoomRuntime,
     events: { type: string; [k: string]: unknown }[],
-  ) {
+  ): Promise<void> {
     const engine = room.engine!;
+    let roundJustEnded = false;
+
     for (const ev of events) {
       if (ev.type === "passBonus") {
         this.io.to(roomKey(room.code)).emit("match:event", {
@@ -438,21 +544,38 @@ export class RoomManager {
         });
       }
       if (ev.type === "roundEnded") {
+        roundJustEnded = true;
         await this.persistRound(room);
       }
     }
 
-    const finished = engine.snapshot().finished;
-    if (finished) {
+    if (engine.snapshot().finished) {
       await this.finishMatch(room);
       return;
     }
 
-    // If a round just ended but the match continues, deal the next round.
-    if (!engine.currentRound || engine.currentRound.isFinished) {
+    if (roundJustEnded || !engine.currentRound || engine.currentRound.isFinished) {
+      const last = engine.snapshot().lastRoundResult;
+      if (last) {
+        const message =
+          last.winningTeam !== null
+            ? `Equipo ${last.winningTeam + 1} suma ${last.points} puntos`
+            : "Empate — nadie suma";
+        this.emitAction(room, {
+          type: "roundEnd",
+          winningTeam: last.winningTeam,
+          points: last.points,
+          message,
+        });
+        await sleep(MATCH_ANIM_MS.roundEnd);
+      }
       engine.startRound();
+      await this.dealAndSync(room);
+      return;
     }
+
     this.broadcastMatch(room);
+    await this.runAutoPassChain(room);
   }
 
   private async persistRound(room: RoomRuntime) {
@@ -461,13 +584,6 @@ export class RoomManager {
     const index = await prisma.matchRound.count({ where: { matchId: room.matchDbId } });
     await prisma.matchRound.create({
       data: { matchId: room.matchDbId, index, result: result as unknown as object },
-    });
-    this.io.to(roomKey(room.code)).emit("match:event", {
-      type: "roundEnded",
-      message:
-        result.winningTeam !== null
-          ? `Fin de ronda: equipo ${result.winningTeam + 1} suma ${result.points} puntos`
-          : "Fin de ronda: empate, nadie suma",
     });
   }
 
@@ -507,8 +623,12 @@ export class RoomManager {
 
     await prisma.room.update({ where: { id: room.roomId }, data: { status: "FINISHED" } });
     this.broadcastMatch(room);
+
+    const winningTeam = state.winningTeam ?? -1;
+    this.emitAction(room, { type: "matchEnd", winningTeam, teamScores: state.teamScores });
+    await sleep(MATCH_ANIM_MS.matchEnd);
     this.io.to(roomKey(room.code)).emit("match:finished", {
-      winningTeam: state.winningTeam ?? -1,
+      winningTeam,
       teamScores: state.teamScores,
     });
   }

@@ -77,12 +77,8 @@ async function main() {
     const myId = idOf(s);
     s.on("connect", () => s.emit("room:join", { code: room.code }));
     s.on("room:error", (e: any) => console.log(`[e2e] room:error (${users[sockets.indexOf(s)].username}):`, e));
-    // Only act on yourHand (always sent right after state, with fresh legal
-    // moves) to avoid acting on a stale/undefined hand.
-    s.on("match:state", (state: any) => {
+    s.on("match:sync", ({ state, hand }: { state: any; hand: any }) => {
       latestState.set(myId, state);
-    });
-    s.on("match:yourHand", (hand: any) => {
       latestHand.set(myId, hand);
       maybeAct(s);
     });
@@ -107,7 +103,7 @@ async function main() {
   sockets[0].emit("match:start");
 
   // Let the match play out.
-  const deadline = Date.now() + 40_000;
+  const deadline = Date.now() + 120_000;
   while (!finished && Date.now() < deadline) await delay(250);
 
   sockets.forEach((s) => s.disconnect());

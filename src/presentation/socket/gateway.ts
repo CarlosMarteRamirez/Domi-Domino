@@ -41,8 +41,8 @@ export function registerGateway(io: AppServer, authSecret: string) {
 
     socket.on("room:join", async ({ code }) => {
       socket.data.roomCode = code;
-      socket.join(`room:${code}`);
-      await manager.join(code, { id: userId, username: socket.data.username });
+      await socket.join(`room:${code}`);
+      await manager.join(code, { id: userId, username: socket.data.username }, socket.id);
     });
 
     socket.on("room:leave", async ({ code }) => {

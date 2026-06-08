@@ -15,9 +15,10 @@ interface Props {
   unread: number;
   onSend: (content: string) => void;
   onSeen: () => void;
+  fullHeight?: boolean;
 }
 
-export function ChatPanel({ messages, currentUserId, unread, onSend, onSeen }: Props) {
+export function ChatPanel({ messages, currentUserId, unread, onSend, onSeen, fullHeight }: Props) {
   const [text, setText] = React.useState("");
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
@@ -34,7 +35,7 @@ export function ChatPanel({ messages, currentUserId, unread, onSend, onSeen }: P
   }
 
   return (
-    <Card className="flex h-full flex-col">
+    <Card className={fullHeight ? "flex h-full min-h-[400px] flex-col" : "flex h-full flex-col"}>
       <CardHeader className="py-3">
         <CardTitle className="flex items-center justify-between text-base">
           Chat
@@ -44,7 +45,11 @@ export function ChatPanel({ messages, currentUserId, unread, onSend, onSeen }: P
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-2 p-3 pt-0">
-        <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto pr-1" style={{ maxHeight: 320 }}>
+        <div
+          ref={scrollRef}
+          className="flex-1 space-y-2 overflow-y-auto pr-1"
+          style={fullHeight ? undefined : { maxHeight: 320 }}
+        >
           {messages.map((m) => (
             <div key={m.id} className={m.userId === currentUserId ? "text-right" : ""}>
               <p className="text-xs text-muted-foreground">{m.displayName}</p>

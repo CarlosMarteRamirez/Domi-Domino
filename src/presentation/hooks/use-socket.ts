@@ -11,35 +11,45 @@ import {
 export type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 /**
- * Establishes an authenticated Socket.io connection. It first fetches a
- * short-lived signed token from the HTTP layer (which holds the Auth.js
- * session) and uses it on the handshake.
+ * Conexión Socket.io autenticada. Reintenta al reconectar y expone el socket
+ * estable para suscribirse a eventos de sala.
  */
 export function useSocket() {
   const [socket, setSocket] = React.useState<AppSocket | null>(null);
   const [connected, setConnected] = React.useState(false);
+  const socketRef = React.useRef<AppSocket | null>(null);
 
   React.useEffect(() => {
     let active = true;
-    let instance: AppSocket | null = null;
 
     (async () => {
       const res = await fetch("/api/realtime/token");
-      if (!res.ok) return;
+      if (!res.ok || !active) return;
       const { token } = (await res.json()) as { token: string };
       if (!active) return;
 
-      instance = io({ path: SOCKET_PATH, auth: { token }, transports: ["websocket", "polling"] });
+      const instance = io({
+        path: SOCKET_PATH,
+        auth: { token },
+        transports: ["websocket", "polling"],
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
+      });
+
       instance.on("connect", () => setConnected(true));
       instance.on("disconnect", () => setConnected(false));
+
+      socketRef.current = instance;
       setSocket(instance);
     })();
 
     return () => {
       active = false;
-      instance?.disconnect();
+      socketRef.current?.disconnect();
+      socketRef.current = null;
     };
   }, []);
 
-  return { socket, connected };
+  return { socket, connected, socketRef };
 }

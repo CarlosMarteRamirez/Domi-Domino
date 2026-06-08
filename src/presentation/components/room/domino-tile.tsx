@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { cn } from "@/presentation/lib/utils";
 
 // Pip positions on a 3x3 grid for each value 0-6.
@@ -29,10 +30,13 @@ function Half({ value, vertical }: { value: number; vertical?: boolean }) {
 interface Props {
   low: number;
   high: number;
-  orientation?: "horizontal" | "vertical";
+  /** "auto": vertical si es doble (low === high), horizontal si no. */
+  orientation?: "horizontal" | "vertical" | "auto";
   selected?: boolean;
   playable?: boolean;
+  draggable?: boolean;
   onClick?: () => void;
+  onDragStart?: (e: React.DragEvent<HTMLButtonElement>) => void;
   className?: string;
 }
 
@@ -42,15 +46,21 @@ export function DominoTile({
   orientation = "vertical",
   selected,
   playable,
+  draggable,
   onClick,
+  onDragStart,
   className,
 }: Props) {
-  const horizontal = orientation === "horizontal";
+  const resolved =
+    orientation === "auto" ? (low === high ? "vertical" : "horizontal") : orientation;
+  const horizontal = resolved === "horizontal";
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={!onClick}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      disabled={!onClick && !draggable}
       className={cn(
         "relative flex items-stretch rounded-md bg-slate-100 shadow-md ring-1 ring-black/20 transition",
         horizontal ? "h-10 w-20 flex-row" : "h-20 w-10 flex-col",

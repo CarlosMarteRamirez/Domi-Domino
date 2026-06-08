@@ -3,24 +3,44 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Trophy } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useSocket } from "@/presentation/hooks/use-socket";
 import { LobbyView } from "./lobby-view";
 import { GameView } from "./game-view";
 import { ChatPanel } from "./chat-panel";
+import { MatchResultsOverlay } from "./match-results-overlay";
 import { Button } from "@/presentation/components/ui/button";
-import { Card, CardContent } from "@/presentation/components/ui/card";
 import type { MatchState } from "@/domain/domino/engine/domino-engine";
 import type { Side } from "@/domain/domino/types";
 import type {
   ChatMessageDto,
   LobbyState,
+  MatchActionDto,
+  MatchHandDto,
   RoomConfigDto,
 } from "@/shared/socket/contract";
+import { MATCH_ANIM_MS } from "@/shared/socket/contract";
 
 interface Props {
   code: string;
   currentUserId: string;
+}
+
+function actionDuration(action: MatchActionDto): number {
+  switch (action.type) {
+    case "play":
+      return MATCH_ANIM_MS.play;
+    case "pass":
+      return MATCH_ANIM_MS.pass;
+    case "deal":
+      return MATCH_ANIM_MS.deal;
+    case "roundEnd":
+      return MATCH_ANIM_MS.roundEnd;
+    case "matchEnd":
+      return MATCH_ANIM_MS.matchEnd;
+    default:
+      return 0;
+  }
 }
 
 export function RoomClient({ code, currentUserId }: Props) {
@@ -28,40 +48,69 @@ export function RoomClient({ code, currentUserId }: Props) {
   const { socket, connected } = useSocket();
   const [lobby, setLobby] = React.useState<LobbyState | null>(null);
   const [match, setMatch] = React.useState<MatchState | null>(null);
-  const [hand, setHand] = React.useState<{ tiles: string[]; legalMoves: { tile: string; sides: Side[] }[] }>({
-    tiles: [],
-    legalMoves: [],
-  });
+  const [hand, setHand] = React.useState<MatchHandDto>({ tiles: [], legalMoves: [] });
   const [messages, setMessages] = React.useState<ChatMessageDto[]>([]);
-  const [events, setEvents] = React.useState<string[]>([]);
   const [unread, setUnread] = React.useState(0);
-  const [finished, setFinished] = React.useState<{ winningTeam: number } | null>(null);
+  const [matchAction, setMatchAction] = React.useState<MatchActionDto | null>(null);
+  const [matchResults, setMatchResults] = React.useState<{
+    winningTeam: number;
+    teamScores: Record<number, number>;
+  } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const joinedRef = React.useRef(false);
+  const actionTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const applyMatchSync = React.useCallback((state: MatchState, nextHand: MatchHandDto) => {
+    setMatch(state);
+    setHand(nextHand);
+  }, []);
+
+  const scheduleActionClear = React.useCallback((action: MatchActionDto) => {
+    if (actionTimerRef.current) clearTimeout(actionTimerRef.current);
+    actionTimerRef.current = setTimeout(() => setMatchAction(null), actionDuration(action));
+  }, []);
+
+  const joinRoom = React.useCallback(() => {
+    if (!socket || joinedRef.current) return;
+    socket.emit("room:join", { code });
+    joinedRef.current = true;
+  }, [socket, code]);
 
   React.useEffect(() => {
     if (!socket) return;
 
-    socket.emit("room:join", { code });
+    const onRoomState = (state: LobbyState) => setLobby(state);
 
-    socket.on("room:state", setLobby);
-    socket.on("match:state", (state) => {
-      setMatch(state);
-      if (state.lastRoundResult) {
-        // round result is also surfaced via match:event messages
+    const onMatchSync = ({ state, hand: nextHand }: { state: MatchState; hand: MatchHandDto }) => {
+      applyMatchSync(state, nextHand);
+    };
+
+    const onMatchAction = (action: MatchActionDto) => {
+      setMatchAction(action);
+      scheduleActionClear(action);
+      if (action.type === "matchEnd") {
+        setMatchResults({ winningTeam: action.winningTeam, teamScores: action.teamScores });
       }
-    });
-    socket.on("match:yourHand", setHand);
-    socket.on("match:event", ({ message }) => setEvents((prev) => [message, ...prev].slice(0, 50)));
-    socket.on("match:finished", ({ winningTeam }) => setFinished({ winningTeam }));
-    socket.on("chat:message", (msg) => {
-      setMessages((prev) => [...prev, msg]);
+    };
+
+    const onChatMessage = (msg: ChatMessageDto) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
       if (msg.userId !== currentUserId) setUnread((u) => u + 1);
-    });
-    socket.on("room:closed", ({ reason }) => {
+    };
+
+    const onChatHistory = (history: ChatMessageDto[]) => {
+      setMessages(history);
+    };
+
+    const onRoomClosed = ({ reason }: { reason: string }) => {
       setError(reason);
       setTimeout(() => router.push("/dashboard"), 2500);
-    });
-    socket.on("room:error", ({ code: errCode, message }) => {
+    };
+
+    const onRoomError = ({ code: errCode, message }: { code: string; message: string }) => {
       if (errCode === "ROOM_CLOSED") {
         setError(message);
         setTimeout(() => router.push("/dashboard"), 2500);
@@ -69,31 +118,51 @@ export function RoomClient({ code, currentUserId }: Props) {
       }
       setError(message);
       setTimeout(() => setError(null), 4000);
-    });
+    };
+
+    const onReconnect = () => {
+      joinedRef.current = false;
+      joinRoom();
+    };
+
+    socket.on("room:state", onRoomState);
+    socket.on("match:sync", onMatchSync);
+    socket.on("match:action", onMatchAction);
+    socket.on("chat:message", onChatMessage);
+    socket.on("chat:history", onChatHistory);
+    socket.on("room:closed", onRoomClosed);
+    socket.on("room:error", onRoomError);
+    socket.on("connect", onReconnect);
+
+    if (socket.connected) joinRoom();
 
     return () => {
-      socket.emit("room:leave", { code });
-      socket.off("room:state");
-      socket.off("room:closed");
-      socket.off("match:state");
-      socket.off("match:yourHand");
-      socket.off("match:event");
-      socket.off("match:finished");
-      socket.off("chat:message");
-      socket.off("room:error");
+      socket.off("room:state", onRoomState);
+      socket.off("match:sync", onMatchSync);
+      socket.off("match:action", onMatchAction);
+      socket.off("chat:message", onChatMessage);
+      socket.off("chat:history", onChatHistory);
+      socket.off("room:closed", onRoomClosed);
+      socket.off("room:error", onRoomError);
+      socket.off("connect", onReconnect);
+      if (actionTimerRef.current) clearTimeout(actionTimerRef.current);
+      joinedRef.current = false;
     };
-  }, [socket, code, currentUserId]);
+  }, [socket, code, currentUserId, router, applyMatchSync, joinRoom, scheduleActionClear]);
 
-  const inGame = lobby?.status === "IN_GAME" && match;
+  const inGame = lobby?.status === "IN_GAME" && match && !matchResults;
+  const myTeam = lobby?.members.find((m) => m.userId === currentUserId)?.team ?? 0;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
-      <header className="mb-4 flex items-center justify-between">
+    <div className="flex min-h-screen w-full flex-col px-3 py-4 sm:px-6 lg:px-8 xl:px-12">
+      <header className="mb-4 flex shrink-0 items-center justify-between">
         <Button asChild variant="ghost" size="sm">
-          <Link href="/dashboard"><ArrowLeft className="mr-1 h-4 w-4" /> Dashboard</Link>
+          <Link href="/dashboard">
+            <ArrowLeft className="mr-1 h-4 w-4" /> Dashboard
+          </Link>
         </Button>
         <span className="text-xs text-muted-foreground">
-          {connected ? "Conectado" : "Conectando..."}
+          {connected ? "Conectado" : "Reconectando..."}
         </span>
       </header>
 
@@ -103,57 +172,59 @@ export function RoomClient({ code, currentUserId }: Props) {
         </div>
       )}
 
-      {finished && (
-        <Card className="mb-4 border-primary">
-          <CardContent className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3">
-              <Trophy className="h-6 w-6 text-amber-400" />
-              <div>
-                <p className="font-bold">¡Partida terminada!</p>
-                <p className="text-sm text-muted-foreground">
-                  Ganó el Equipo {finished.winningTeam + 1}
-                </p>
-              </div>
-            </div>
-            <Button asChild><Link href="/dashboard">Volver</Link></Button>
-          </CardContent>
-        </Card>
+      {matchResults && (
+        <MatchResultsOverlay
+          winningTeam={matchResults.winningTeam}
+          teamScores={matchResults.teamScores}
+          myTeam={myTeam}
+          visible
+        />
       )}
 
       {!lobby && <p className="text-center text-muted-foreground">Cargando sala...</p>}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-        <div>
-          {lobby && !inGame && (
+      <div
+        className={
+          inGame
+            ? "grid flex-1 gap-4 xl:grid-cols-[1fr_340px] 2xl:grid-cols-[1fr_380px]"
+            : "grid flex-1 gap-4 lg:grid-cols-[1fr_340px]"
+        }
+      >
+        <div className="min-w-0">
+          {lobby && !inGame && !matchResults && (
             <LobbyView
               lobby={lobby}
               currentUserId={currentUserId}
               onReady={(ready) => socket?.emit("room:ready", { ready })}
               onSetTeam={(team) => socket?.emit("room:setTeam", { team })}
-              onUpdateConfig={(patch: Partial<RoomConfigDto>) => socket?.emit("room:updateConfig", patch)}
+              onUpdateConfig={(patch: Partial<RoomConfigDto>) =>
+                socket?.emit("room:updateConfig", patch)
+              }
               onStart={() => socket?.emit("match:start")}
             />
           )}
-          {lobby && inGame && match && (
+          {lobby && match && !matchResults && (
             <GameView
               state={match}
               members={lobby.members}
               myHand={hand}
               currentUserId={currentUserId}
-              events={events}
+              matchAction={matchAction}
               onPlay={(tile, side) => socket?.emit("match:playTile", { tile, side })}
-              onPass={() => socket?.emit("match:pass")}
             />
           )}
         </div>
 
-        <ChatPanel
-          messages={messages}
-          currentUserId={currentUserId}
-          unread={unread}
-          onSend={(content) => socket?.emit("chat:send", { content })}
-          onSeen={() => setUnread(0)}
-        />
+        <div className={inGame ? "min-h-[400px] xl:min-h-[calc(100vh-8rem)]" : ""}>
+          <ChatPanel
+            messages={messages}
+            currentUserId={currentUserId}
+            unread={unread}
+            onSend={(content) => socket?.emit("chat:send", { content })}
+            onSeen={() => setUnread(0)}
+            fullHeight={Boolean(inGame)}
+          />
+        </div>
       </div>
     </div>
   );
