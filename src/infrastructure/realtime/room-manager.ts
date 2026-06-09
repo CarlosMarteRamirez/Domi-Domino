@@ -11,7 +11,7 @@ import type {
   ServerToClientEvents,
   SocketData,
 } from "@/shared/socket/contract";
-import { MATCH_ANIM_MS } from "@/shared/socket/contract";
+import { LOBBY_AUTO_START_MS, MATCH_ANIM_MS } from "@/shared/socket/contract";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -38,6 +38,8 @@ interface RoomRuntime {
   members: Map<string, MemberRuntime>;
   engine: DominoEngine | null;
   matchDbId: string | null;
+  autoStartTimer: ReturnType<typeof setTimeout> | null;
+  matchStartsAt: number | null;
 }
 
 const roomKey = (code: string) => `room:${code}`;
@@ -112,7 +114,12 @@ export class RoomManager {
       ),
       engine: null,
       matchDbId: null,
+      autoStartTimer: null,
+      matchStartsAt: null,
     };
+    if (runtime.config.maxPlayers === 2 && runtime.config.blockMode !== "individual") {
+      runtime.config.blockMode = "individual";
+    }
     this.rooms.set(code, runtime);
     return runtime;
   }
@@ -131,6 +138,7 @@ export class RoomManager {
         teamSelection: room.config.teamSelection,
         maxPlayers: room.config.maxPlayers,
       },
+      matchStartsAt: room.matchStartsAt,
       members: [...room.members.values()]
         .sort((a, b) => a.seat - b.seat)
         .map<LobbyMember>((m) => ({
@@ -291,8 +299,57 @@ export class RoomManager {
     this.broadcastLobby(room);
   }
 
+  private canBeginMatch(room: RoomRuntime): boolean {
+    if (room.status !== "LOBBY") return false;
+    const members = [...room.members.values()];
+    return (
+      members.length === room.config.maxPlayers && members.every((m) => m.isReady)
+    );
+  }
+
+  private clearAutoStart(room: RoomRuntime) {
+    if (room.autoStartTimer) {
+      clearTimeout(room.autoStartTimer);
+      room.autoStartTimer = null;
+    }
+    room.matchStartsAt = null;
+  }
+
+  private syncAutoStart(room: RoomRuntime) {
+    if (room.status !== "LOBBY") {
+      this.clearAutoStart(room);
+      return;
+    }
+    if (!this.canBeginMatch(room)) {
+      const hadCountdown = room.matchStartsAt !== null || room.autoStartTimer !== null;
+      this.clearAutoStart(room);
+      if (hadCountdown) this.broadcastLobby(room);
+      return;
+    }
+    if (room.autoStartTimer) return;
+
+    room.matchStartsAt = Date.now() + LOBBY_AUTO_START_MS;
+    room.autoStartTimer = setTimeout(() => {
+      room.autoStartTimer = null;
+      void this.runLocked(room.code, () => this.autoStartFireImpl(room.code));
+    }, LOBBY_AUTO_START_MS);
+    this.broadcastLobby(room);
+  }
+
+  private async autoStartFireImpl(code: string) {
+    const room = this.rooms.get(code);
+    if (!room) return;
+    room.matchStartsAt = null;
+    if (!this.canBeginMatch(room)) {
+      this.broadcastLobby(room);
+      return;
+    }
+    await this.beginMatchImpl(room);
+  }
+
   /** Cierra la sala: persiste FINISHED, limpia miembros y la saca del listado público. */
   private async closeRoom(room: RoomRuntime, reason: string) {
+    this.clearAutoStart(room);
     room.status = "FINISHED";
     room.engine = null;
     await prisma.room.update({
@@ -318,6 +375,7 @@ export class RoomManager {
       data: { isReady: ready },
     });
     this.broadcastLobby(room);
+    this.syncAutoStart(room);
   }
 
   setTeam(code: string, userId: string, team: number) {
@@ -371,12 +429,22 @@ export class RoomManager {
     if (room.status !== "LOBBY") return;
 
     if (patch.targetScore) room.config.targetScore = patch.targetScore as MatchConfig["targetScore"];
-    if (patch.blockMode) room.config.blockMode = patch.blockMode;
+    if (patch.blockMode) {
+      if (room.config.maxPlayers === 2 && patch.blockMode !== "individual") {
+        return this.error(
+          "INVALID_CONFIG",
+          "Con 2 jugadores solo se permite tranque individual",
+          userId,
+        );
+      }
+      room.config.blockMode = patch.blockMode;
+    }
     if (patch.passBonus !== undefined) room.config.passBonus = patch.passBonus as MatchConfig["passBonus"];
     if (patch.teamSelection) room.config.teamSelection = patch.teamSelection;
     if (patch.maxPlayers && room.members.size <= patch.maxPlayers) {
       room.config.maxPlayers = patch.maxPlayers;
       room.config.playerCount = patch.maxPlayers as PlayerCount;
+      if (patch.maxPlayers === 2) room.config.blockMode = "individual";
     }
 
     await prisma.room.update({
@@ -402,13 +470,21 @@ export class RoomManager {
     if (room.hostId !== userId)
       return this.error("NOT_HOST", "Solo el anfitrion puede iniciar", userId);
     if (room.status !== "LOBBY") return;
+    if (!this.canBeginMatch(room)) {
+      const members = [...room.members.values()];
+      if (members.length !== room.config.maxPlayers) {
+        return this.error("NOT_FULL", "Faltan jugadores para iniciar", userId);
+      }
+      return this.error("NOT_READY", "Todos deben marcar Listo", userId);
+    }
+    await this.beginMatchImpl(room);
+  }
+
+  private async beginMatchImpl(room: RoomRuntime) {
+    if (room.status !== "LOBBY" || !this.canBeginMatch(room)) return;
+    this.clearAutoStart(room);
 
     const members = [...room.members.values()];
-    if (members.length !== room.config.maxPlayers)
-      return this.error("NOT_FULL", "Faltan jugadores para iniciar", userId);
-    if (!members.every((m) => m.isReady))
-      return this.error("NOT_READY", "Todos deben marcar Listo", userId);
-
     let players: EnginePlayer[];
     if (room.config.teamSelection === "auto") {
       players = members
@@ -423,8 +499,7 @@ export class RoomManager {
       if (room.config.maxPlayers === 4) {
         const counts = [0, 0];
         players.forEach((p) => (counts[p.teamIndex] += 1));
-        if (counts[0] !== 2 || counts[1] !== 2)
-          return this.error("UNBALANCED", "Equipos deben tener 2 jugadores cada uno", userId);
+        if (counts[0] !== 2 || counts[1] !== 2) return;
       }
     }
 

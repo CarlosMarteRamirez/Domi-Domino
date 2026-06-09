@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, Copy, Crown, Link2, Play } from "lucide-react";
+import { Check, Copy, Crown, Link2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/presentation/components/ui/card";
 import { Button } from "@/presentation/components/ui/button";
 import { Badge } from "@/presentation/components/ui/badge";
@@ -22,16 +22,25 @@ interface Props {
   onReady: (ready: boolean) => void;
   onSetTeam: (team: number) => void;
   onUpdateConfig: (patch: Partial<RoomConfigDto>) => void;
-  onStart: () => void;
 }
 
-export function LobbyView({ lobby, currentUserId, onReady, onSetTeam, onUpdateConfig, onStart }: Props) {
+export function LobbyView({ lobby, currentUserId, onReady, onSetTeam, onUpdateConfig }: Props) {
   const me = lobby.members.find((m) => m.userId === currentUserId);
   const isHost = lobby.hostId === currentUserId;
   const [inviteUrl, setInviteUrl] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
+  const [now, setNow] = React.useState(() => Date.now());
+  const isTwoPlayer = lobby.config.maxPlayers === 2;
 
-  const allReady = lobby.members.length === lobby.config.maxPlayers && lobby.members.every((m) => m.isReady);
+  React.useEffect(() => {
+    if (!lobby.matchStartsAt) return;
+    const id = setInterval(() => setNow(Date.now()), 200);
+    return () => clearInterval(id);
+  }, [lobby.matchStartsAt]);
+
+  const startSecondsLeft = lobby.matchStartsAt
+    ? Math.max(0, Math.ceil((lobby.matchStartsAt - now) / 1000))
+    : null;
 
   async function makeInvite() {
     const result = await createInviteLinkAction(lobby.code);
@@ -101,12 +110,12 @@ export function LobbyView({ lobby, currentUserId, onReady, onSetTeam, onUpdateCo
                   </SelectContent>
                 </Select>
               )}
-              {isHost && (
-                <Button onClick={onStart} disabled={!allReady}>
-                  <Play className="mr-1 h-4 w-4" /> Iniciar partida
-                </Button>
-              )}
             </div>
+            {startSecondsLeft !== null && startSecondsLeft > 0 && (
+              <p className="text-sm font-medium text-domino-blue-light">
+                La partida inicia en {startSecondsLeft}…
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -143,13 +152,13 @@ export function LobbyView({ lobby, currentUserId, onReady, onSetTeam, onUpdateCo
             </ConfigRow>
             <ConfigRow label="Tranque">
               <Select
-                disabled={!isHost}
-                value={lobby.config.blockMode}
+                disabled={!isHost || isTwoPlayer}
+                value={isTwoPlayer ? "individual" : lobby.config.blockMode}
                 onValueChange={(v) => onUpdateConfig({ blockMode: v as "individual" | "parejas" })}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="parejas">Parejas</SelectItem>
+                  {!isTwoPlayer && <SelectItem value="parejas">Parejas</SelectItem>}
                   <SelectItem value="individual">Individual</SelectItem>
                 </SelectContent>
               </Select>

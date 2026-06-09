@@ -3,15 +3,19 @@ import { prisma } from "@/infrastructure/db/prisma/client";
 import { generateRoomCode } from "@/shared/code";
 import { Prisma } from "@prisma/client";
 
-export const createRoomSchema = z.object({
-  name: z.string().min(3).max(40),
-  visibility: z.enum(["PUBLIC", "PRIVATE"]),
-  maxPlayers: z.union([z.literal(2), z.literal(4)]),
-  targetScore: z.union([z.literal(100), z.literal(200), z.literal(400), z.literal(500)]),
-  blockMode: z.enum(["individual", "parejas"]),
-  passBonus: z.union([z.literal(0), z.literal(25), z.literal(30)]),
-  teamSelection: z.enum(["manual", "auto"]),
-});
+export const createRoomSchema = z
+  .object({
+    name: z.string().min(3).max(40),
+    visibility: z.enum(["PUBLIC", "PRIVATE"]),
+    maxPlayers: z.union([z.literal(2), z.literal(4)]),
+    targetScore: z.union([z.literal(100), z.literal(200), z.literal(400), z.literal(500)]),
+    blockMode: z.enum(["individual", "parejas"]),
+    passBonus: z.union([z.literal(0), z.literal(25), z.literal(30)]),
+    teamSelection: z.enum(["manual", "auto"]),
+  })
+  .refine((data) => data.maxPlayers !== 2 || data.blockMode === "individual", {
+    message: "Con 2 jugadores la modalidad de tranque debe ser individual",
+  });
 
 export type CreateRoomInput = z.infer<typeof createRoomSchema>;
 

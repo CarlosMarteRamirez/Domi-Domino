@@ -31,7 +31,12 @@ export interface LobbyState {
   status: "LOBBY" | "IN_GAME" | "FINISHED";
   config: RoomConfigDto;
   members: LobbyMember[];
+  /** Unix ms; la partida arranca automáticamente al llegar a este instante. */
+  matchStartsAt: number | null;
 }
+
+/** Espera en lobby antes de iniciar cuando todos marcan listo. */
+export const LOBBY_AUTO_START_MS = 3000;
 
 export interface ChatMessageDto {
   id: string;

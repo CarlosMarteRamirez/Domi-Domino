@@ -31,7 +31,11 @@ export function CreateRoomTab() {
   });
 
   function set<K extends keyof CreateRoomInput>(key: K, value: CreateRoomInput[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [key]: value };
+      if (key === "maxPlayers" && value === 2) next.blockMode = "individual";
+      return next;
+    });
   }
 
   async function submit() {
@@ -92,10 +96,14 @@ export function CreateRoomTab() {
           </div>
           <div className="space-y-2">
             <Label>Modalidad de tranque</Label>
-            <Select value={form.blockMode} onValueChange={(v) => set("blockMode", v as CreateRoomInput["blockMode"])}>
+            <Select
+              value={form.maxPlayers === 2 ? "individual" : form.blockMode}
+              disabled={form.maxPlayers === 2}
+              onValueChange={(v) => set("blockMode", v as CreateRoomInput["blockMode"])}
+            >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="parejas">Parejas</SelectItem>
+                {form.maxPlayers === 4 && <SelectItem value="parejas">Parejas</SelectItem>}
                 <SelectItem value="individual">Individual</SelectItem>
               </SelectContent>
             </Select>

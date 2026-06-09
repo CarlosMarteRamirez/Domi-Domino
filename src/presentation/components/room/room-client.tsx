@@ -205,7 +205,6 @@ export function RoomClient({ code, currentUserId }: Props) {
               onUpdateConfig={(patch: Partial<RoomConfigDto>) =>
                 socket?.emit("room:updateConfig", patch)
               }
-              onStart={() => socket?.emit("match:start")}
             />
           )}
           {lobby && match && !matchResults && (

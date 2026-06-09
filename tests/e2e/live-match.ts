@@ -97,10 +97,9 @@ async function main() {
   // Wait for everyone to be in the lobby, then ready up and start.
   await delay(1500);
   sockets.forEach((s) => s.emit("room:ready", { ready: true }));
-  await delay(600);
+  await delay(3500);
   sockets[0].emit("chat:send", { content: "GG!" });
   await delay(300);
-  sockets[0].emit("match:start");
 
   // Let the match play out.
   const deadline = Date.now() + 120_000;
