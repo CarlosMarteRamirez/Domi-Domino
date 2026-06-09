@@ -222,7 +222,7 @@ export function GameTable({ state, members, myHand, currentUserId, matchAction, 
             )}
           </div>
 
-          <div className="min-w-0 overflow-hidden">
+          <div className="min-w-0 overflow-visible">
             <BoardView
               ref={boardViewRef}
               board={state.board}

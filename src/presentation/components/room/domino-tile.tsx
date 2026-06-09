@@ -55,6 +55,8 @@ interface Props {
   high: number;
   /** "auto": vertical si es doble (low === high), horizontal si no. */
   orientation?: "horizontal" | "vertical" | "auto";
+  /** Fila de serpiente fuera de la central: invierte mitades y ajusta el divisor. */
+  reversed?: boolean;
   selected?: boolean;
   playable?: boolean;
   draggable?: boolean;
@@ -67,6 +69,7 @@ export function DominoTile({
   low,
   high,
   orientation = "vertical",
+  reversed = false,
   selected,
   playable,
   draggable,
@@ -77,6 +80,7 @@ export function DominoTile({
   const resolved =
     orientation === "auto" ? (low === high ? "vertical" : "horizontal") : orientation;
   const horizontal = resolved === "horizontal";
+  const flip = horizontal && reversed;
   return (
     <button
       type="button"
@@ -87,6 +91,7 @@ export function DominoTile({
       className={cn(
         "relative flex items-stretch rounded-md bg-slate-100 shadow-md ring-1 ring-black/20 transition",
         horizontal ? "h-10 w-20 flex-row" : "h-20 w-10 flex-col",
+        flip && "flex-row-reverse",
         playable && "ring-2 ring-primary hover:-translate-y-1",
         selected && "-translate-y-1 ring-2 ring-amber-400",
         onClick ? "cursor-pointer" : "cursor-default",
@@ -94,7 +99,16 @@ export function DominoTile({
       )}
       aria-label={`Ficha ${low}-${high}`}
     >
-      <div className={cn("flex-1", horizontal ? "border-r border-slate-400" : "border-b border-slate-400")}>
+      <div
+        className={cn(
+          "flex-1",
+          horizontal
+            ? flip
+              ? "border-l border-slate-400"
+              : "border-r border-slate-400"
+            : "border-b border-slate-400",
+        )}
+      >
         <Half value={high} tileHorizontal={horizontal} />
       </div>
       <div className="flex-1">

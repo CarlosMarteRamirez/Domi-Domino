@@ -62,13 +62,17 @@ export function PlayFlyAnimation({
 }: Props) {
   const [flyStyle, setFlyStyle] = React.useState<React.CSSProperties | null>(null);
   const [hidden, setHidden] = React.useState(false);
+  const openingPlayRef = React.useRef(false);
 
   React.useEffect(() => {
     if (!action || action.type !== "play") {
       setFlyStyle(null);
       setHidden(false);
+      openingPlayRef.current = false;
       return;
     }
+
+    openingPlayRef.current = boardEmpty;
 
     const apply = () => {
       const table = tableAreaRef.current;
@@ -76,7 +80,9 @@ export function PlayFlyAnimation({
       const boardEl = boardApi?.getBoardElement();
       if (!table || !boardApi || !boardEl) return;
 
-      const targetLocal = boardApi.getTargetPoint(boardEmpty ? "center" : action.side);
+      const targetLocal = boardApi.getTargetPoint(
+        openingPlayRef.current ? "center" : action.side,
+      );
       if (!targetLocal) return;
 
       const tableRect = table.getBoundingClientRect();
@@ -115,16 +121,7 @@ export function PlayFlyAnimation({
       if (raf2) cancelAnimationFrame(raf2);
       clearTimeout(timer);
     };
-  }, [
-    action,
-    boardEmpty,
-    tableAreaRef,
-    boardRef,
-    getPlayerOriginEl,
-    mySeat,
-    playerCount,
-    playerSeats,
-  ]);
+  }, [action, boardEmpty, tableAreaRef, boardRef, getPlayerOriginEl, mySeat, playerCount, playerSeats]);
 
   if (!action || action.type !== "play" || !flyStyle || hidden) return null;
 

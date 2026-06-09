@@ -30,7 +30,13 @@ export interface MatchState {
   currentPlayerId: string | null;
   players: PlayerPublicState[];
   board: {
-    tiles: { id: string; leftValue: number; rightValue: number; placedBy: string }[];
+    tiles: {
+      id: string;
+      leftValue: number;
+      rightValue: number;
+      placedBy: string;
+      side: import("../types").Side | "first";
+    }[];
     leftEnd: number | null;
     rightEnd: number | null;
   };
@@ -169,6 +175,7 @@ export class DominoEngine {
               leftValue: t.leftValue,
               rightValue: t.rightValue,
               placedBy: t.placedBy,
+              side: t.side,
             }))
           : [],
         leftEnd: board?.leftEnd ?? null,
