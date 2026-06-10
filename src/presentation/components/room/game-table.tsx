@@ -13,10 +13,16 @@ import { PlayFlyAnimation } from "./play-fly-animation";
 
 type SeatPosition = "top" | "bottom" | "left" | "right";
 
-/** Distancia al borde del tablero verde para alertas de pase. */
-const PASS_ANCHOR_INSET = 40;
+/** Distancia desde el borde del tablero verde hacia adentro (px). */
+const PASS_ANCHOR_INSET = 48;
+/** 0 = borde del tablero, 1 = carta del jugador (solo laterales). */
+const PASS_LATERAL_SEAT_BLEND = 0.86;
 
-/** Asigna posición en mesa según asiento relativo al jugador actual. */
+function blendToward(board: number, seat: number, t: number) {
+  return board + (seat - board) * t;
+}
+
+/** Asigna posición en mesa según asiento relativo al jugador actual. */
 function seatPosition(relativeOffset: number, playerCount: number): SeatPosition {
   if (playerCount === 2) return relativeOffset === 0 ? "bottom" : "top";
   const map: SeatPosition[] = ["bottom", "right", "top", "left"];
@@ -124,30 +130,47 @@ export function GameTable({ state, members, myHand, currentUserId, matchAction, 
 
       const br = board.getBoundingClientRect();
       const tr = table.getBoundingClientRect();
+      const ox = br.left - tr.left;
+      const oy = br.top - tr.top;
+      const inset = PASS_ANCHOR_INSET;
+
+      const seatEl = (playerId: string | undefined) =>
+        playerId ? seatElementsRef.current.get(playerId) : null;
+
       switch (position) {
         case "top":
-          return {
-            x: br.left - tr.left + br.width / 2,
-            y: br.top - tr.top + PASS_ANCHOR_INSET,
-          };
+          return { x: ox + br.width / 2, y: oy + inset };
         case "bottom":
+          return { x: ox + br.width / 2, y: oy + br.height - inset };
+        case "left": {
+          const bx = ox + inset;
+          const by = oy + br.height / 2;
+          const el = seatEl(leftPlayer?.id);
+          if (!el) return { x: bx, y: by };
+          const sr = el.getBoundingClientRect();
+          const sx = sr.right - tr.left + 10;
+          const sy = sr.top - tr.top + sr.height / 2;
           return {
-            x: br.left - tr.left + br.width / 2,
-            y: br.bottom - tr.top - PASS_ANCHOR_INSET,
+            x: blendToward(bx, sx, PASS_LATERAL_SEAT_BLEND),
+            y: sy,
           };
-        case "left":
+        }
+        case "right": {
+          const bx = ox + br.width - inset;
+          const by = oy + br.height / 2;
+          const el = seatEl(rightPlayer?.id);
+          if (!el) return { x: bx, y: by };
+          const sr = el.getBoundingClientRect();
+          const sx = sr.left - tr.left - 10;
+          const sy = sr.top - tr.top + sr.height / 2;
           return {
-            x: (br.left - tr.left) * 1.3 + PASS_ANCHOR_INSET,
-            y: br.top - tr.top + br.height / 2,
+            x: blendToward(bx, sx, PASS_LATERAL_SEAT_BLEND),
+            y: sy,
           };
-        case "right":
-          return {
-            x: (br.right - tr.left) / 1.02 - PASS_ANCHOR_INSET,
-            y: br.top - tr.top + br.height / 2,
-          };
+        }
       }
     },
-    [],
+    [leftPlayer?.id, rightPlayer?.id],
   );
 
   return (

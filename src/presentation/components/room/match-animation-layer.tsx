@@ -7,6 +7,22 @@ import { cn } from "@/presentation/lib/utils";
 
 type SeatPosition = "top" | "bottom" | "left" | "right";
 
+/**
+ * DEV: alertas de pase en bucle para ajustar posición/visual.
+ * Poner en false antes de producción.
+ */
+export const PASS_ALERT_DEV_LOOP = false;
+
+/** true = previsualizar bono de pase; false = "Pasa" normal. */
+export const PASS_ALERT_DEV_BONUS = false;
+
+const PASS_DEV_LABELS: Record<SeatPosition, string> = {
+  top: "Arriba",
+  right: "Derecha",
+  bottom: "Tú (abajo)",
+  left: "Izquierda",
+};
+
 function playerSeatPosition(
   playerId: string,
   currentUserId: string,
@@ -21,11 +37,12 @@ function playerSeatPosition(
   return map[relative % 4] ?? "top";
 }
 
+/** Respaldo aproximado: centro de cada borde del área central de la mesa. */
 const ORIGIN: Record<SeatPosition, { x: string; y: string }> = {
-  bottom: { x: "50%", y: "88%" },
-  top: { x: "50%", y: "12%" },
-  left: { x: "12%", y: "48%" },
-  right: { x: "88%", y: "48%" },
+  top: { x: "50%", y: "28%" },
+  bottom: { x: "50%", y: "62%" },
+  left: { x: "32%", y: "45%" },
+  right: { x: "68%", y: "45%" },
 };
 
 const DEAL_SEATS: Record<number, SeatPosition[]> = {
@@ -138,7 +155,7 @@ interface Props {
   mySeat: number;
   playerCount: number;
   playerSeats: Map<string, number>;
-  /** Posición en px (relativa al contenedor de mesa) en el borde del tablero verde. */
+  /** Posición en px (relativa al contenedor de mesa) en el borde del tablero verde. */
   getPassAnchor?: (seat: SeatPosition) => { x: number; y: number } | null;
 }
 
@@ -150,6 +167,7 @@ function PassNotification({
   amount,
   teamIndex,
   getPassAnchor,
+  loop = false,
 }: {
   seat: SeatPosition;
   duration: number;
@@ -158,6 +176,7 @@ function PassNotification({
   amount?: number;
   teamIndex?: number;
   getPassAnchor?: (seat: SeatPosition) => { x: number; y: number } | null;
+  loop?: boolean;
 }) {
   const [anchor, setAnchor] = React.useState<{ x: number; y: number } | null>(null);
 
@@ -178,33 +197,36 @@ function PassNotification({
 
   return (
     <div className="pointer-events-none absolute inset-0 z-30">
-      <div className="absolute animate-pass-float" style={style}>
-        <div
-          className={cn(
-            "rounded-full px-4 py-2 text-center shadow-lg backdrop-blur-sm",
-            isBonus
-              ? "border border-emerald-400/50 bg-emerald-500/15"
-              : "border border-amber-400/60 bg-amber-500/20",
-          )}
-        >
-          <p
+      {/* Posición fija; la animación va en un hijo para no pisar translate(-50%, -50%). */}
+      <div className="absolute" style={style}>
+        <div className={loop ? "animate-pass-float-infinite" : "animate-pass-float"}>
+          <div
             className={cn(
-              "text-xs font-semibold",
-              isBonus ? "text-emerald-200/90" : "text-amber-200",
+              "rounded-full px-4 py-2 text-center shadow-lg backdrop-blur-sm",
+              isBonus
+                ? "border border-emerald-400/50 bg-emerald-500/15"
+                : "border border-amber-400/60 bg-amber-500/20",
             )}
           >
-            {displayName}
-          </p>
-          {isBonus ? (
-            <>
-              <p className="text-sm font-bold text-emerald-100">+{amount} puntos</p>
-              <p className="text-[10px] text-emerald-200/70">
-                Eq. {(teamIndex ?? 0) + 1} · todos pasaron
-              </p>
-            </>
-          ) : (
-            <p className="text-sm font-bold text-amber-100">Pasa 🃏</p>
-          )}
+            <p
+              className={cn(
+                "text-xs font-semibold",
+                isBonus ? "text-emerald-200/90" : "text-amber-200",
+              )}
+            >
+              {displayName}
+            </p>
+            {isBonus ? (
+              <>
+                <p className="text-sm font-bold text-emerald-100">+{amount} puntos</p>
+                <p className="text-[10px] text-emerald-200/70">
+                  Eq. {(teamIndex ?? 0) + 1} · todos pasaron
+                </p>
+              </>
+            ) : (
+              <p className="text-sm font-bold text-amber-100">Pasa 🃏</p>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -219,6 +241,27 @@ export function MatchAnimationLayer({
   playerSeats,
   getPassAnchor,
 }: Props) {
+  if (PASS_ALERT_DEV_LOOP) {
+    const seats = DEAL_SEATS[playerCount] ?? DEAL_SEATS[4]!;
+    return (
+      <>
+        {seats.map((seat) => (
+          <PassNotification
+            key={seat}
+            seat={seat}
+            duration={MATCH_ANIM_MS.pass}
+            isBonus={PASS_ALERT_DEV_BONUS}
+            displayName={PASS_DEV_LABELS[seat]}
+            amount={PASS_ALERT_DEV_BONUS ? 25 : undefined}
+            teamIndex={0}
+            getPassAnchor={getPassAnchor}
+            loop
+          />
+        ))}
+      </>
+    );
+  }
+
   if (!action) return null;
 
   if (action.type === "play") {
