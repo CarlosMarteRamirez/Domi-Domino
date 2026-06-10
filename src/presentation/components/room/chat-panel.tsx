@@ -47,9 +47,7 @@ export function ChatPanel({ messages, currentUserId, unread, onSend, onSeen, ful
       <CardContent className="flex flex-1 flex-col gap-2 p-3 pt-0">
         <div
           ref={scrollRef}
-          className="flex-1 space-y-2 overflow-y-auto pr-1"
-          style={fullHeight ? undefined : { maxHeight: 320 }}
-        >
+          className="flex-1 space-y-2 overflow-y-auto pr-1">
           {messages.map((m) => (
             <div key={m.id} className={m.userId === currentUserId ? "text-right" : ""}>
               <p className="text-xs text-muted-foreground">{m.displayName}</p>

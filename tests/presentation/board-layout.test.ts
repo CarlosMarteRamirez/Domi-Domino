@@ -97,7 +97,7 @@ describe("computeChainLayout", () => {
     const neighbor = styles[styles.length - 2]!;
     const shift = BOARD_TILE.hW + BOARD_TILE.gap;
 
-    expect(double.orientation).toBe("horizontal");
+    expect(double.orientation).toBe("vertical");
     expect(neighbor.anchor.left).toBe(double.anchor.left! - shift);
     expect(double.anchor.top).toBe(
       (neighbor.anchor.top ?? 0) + neighbor.height / 2 - double.height / 2,
@@ -118,9 +118,42 @@ describe("computeChainLayout", () => {
     const double = styles[styles.length - 1]!;
     const prev = styles[styles.length - 2]!;
 
-    expect(double.orientation).toBe("horizontal");
+    expect(double.orientation).toBe("vertical");
     expect(prev.orientation).toBe("horizontal");
     expect(prev.anchor.left! + prev.width + BOARD_TILE.gap).toBeLessThanOrEqual(double.anchor.left!);
+  });
+
+  it("orients doubles in a horizontal row: vertical after horizontal, horizontal after vertical", () => {
+    const tiles: Parameters<typeof computeChainLayout>[0] = [
+      { leftValue: 6, rightValue: 6, side: "first" },
+      { leftValue: 6, rightValue: 5, side: "right" },
+      { leftValue: 5, rightValue: 5, side: "right" },
+      { leftValue: 5, rightValue: 0, side: "right" },
+      { leftValue: 0, rightValue: 0, side: "right" },
+    ];
+
+    const styles = computeChainLayout(tiles, 720, CHAIN_H);
+    const tile65 = styles.find(
+      (s) =>
+        (s.leftValue === 6 && s.rightValue === 5) ||
+        (s.leftValue === 5 && s.rightValue === 6),
+    )!;
+    const double5 = styles.find((s) => s.leftValue === 5 && s.rightValue === 5)!;
+    const tile50 = styles.find(
+      (s) =>
+        (s.leftValue === 5 && s.rightValue === 0) ||
+        (s.leftValue === 0 && s.rightValue === 5),
+    )!;
+    const double0 = styles.find((s) => s.leftValue === 0 && s.rightValue === 0)!;
+
+    expect(double5.orientation).toBe("vertical");
+    expect(double5.anchor.top).toBe(
+      tile65.anchor.top! + tile65.height / 2 - double5.height / 2,
+    );
+    expect(double0.orientation).toBe("vertical");
+    expect(double0.anchor.top).toBe(
+      tile50.anchor.top! + tile50.height / 2 - double0.height / 2,
+    );
   });
 
   it("places horizontal below a vertical corner, extending left (RTL row)", () => {
