@@ -97,7 +97,7 @@ describe("computeChainLayout", () => {
     const neighbor = styles[styles.length - 2]!;
     const shift = BOARD_TILE.hW + BOARD_TILE.gap;
 
-    expect(double.orientation).toBe("vertical");
+    expect(double.orientation).toBe("horizontal");
     expect(neighbor.anchor.left).toBe(double.anchor.left! - shift);
     expect(double.anchor.top).toBe(
       (neighbor.anchor.top ?? 0) + neighbor.height / 2 - double.height / 2,
@@ -118,7 +118,7 @@ describe("computeChainLayout", () => {
     const double = styles[styles.length - 1]!;
     const prev = styles[styles.length - 2]!;
 
-    expect(double.orientation).toBe("vertical");
+    expect(double.orientation).toBe("horizontal");
     expect(prev.orientation).toBe("horizontal");
     expect(prev.anchor.left! + prev.width + BOARD_TILE.gap).toBeLessThanOrEqual(double.anchor.left!);
   });
@@ -265,6 +265,57 @@ describe("computeChainLayout", () => {
       }
     }
     expect(found).toBe(true);
+  });
+
+  it("places a double above a vertical up-turn, not beside it", () => {
+    const tiles: Parameters<typeof computeChainLayout>[0] = [
+      { leftValue: 3, rightValue: 3, side: "left" },
+      { leftValue: 3, rightValue: 4, side: "left" },
+      { leftValue: 4, rightValue: 2, side: "left" },
+      { leftValue: 2, rightValue: 1, side: "left" },
+      { leftValue: 1, rightValue: 0, side: "left" },
+      { leftValue: 0, rightValue: 0, side: "first" },
+    ];
+
+    const styles = computeChainLayout(tiles, 220, CHAIN_H);
+    const corner = styles.find(
+      (s) =>
+        (s.leftValue === 3 && s.rightValue === 4) ||
+        (s.leftValue === 4 && s.rightValue === 3),
+    )!;
+    const double3 = styles.find((s) => s.leftValue === 3 && s.rightValue === 3)!;
+
+    expect(corner.orientation).toBe("vertical");
+    expect(double3.orientation).toBe("horizontal");
+    expect(double3.anchor.left).toBe(
+      corner.anchor.left! + corner.width / 2 - double3.width / 2,
+    );
+    expect(double3.anchor.top! + double3.height + BOARD_TILE.gap).toBe(corner.anchor.top!);
+  });
+
+  it("places the next vertical tile above a corner double, not beside it", () => {
+    const tiles: Parameters<typeof computeChainLayout>[0] = [
+      { leftValue: 3, rightValue: 1, side: "left" },
+      { leftValue: 3, rightValue: 3, side: "left" },
+      { leftValue: 3, rightValue: 4, side: "left" },
+      { leftValue: 4, rightValue: 2, side: "left" },
+      { leftValue: 2, rightValue: 1, side: "left" },
+      { leftValue: 1, rightValue: 0, side: "left" },
+      { leftValue: 0, rightValue: 0, side: "first" },
+    ];
+
+    const styles = computeChainLayout(tiles, 220, CHAIN_H);
+    const double3 = styles.find((s) => s.leftValue === 3 && s.rightValue === 3)!;
+    const tile31 = styles.find(
+      (s) =>
+        (s.leftValue === 3 && s.rightValue === 1) ||
+        (s.leftValue === 1 && s.rightValue === 3),
+    )!;
+
+    expect(double3.orientation).toBe("horizontal");
+    expect(tile31.orientation).toBe("vertical");
+    expect(tile31.anchor.top! + tile31.height + BOARD_TILE.gap).toBe(double3.anchor.top!);
+    expect(tile31.anchor.left).toBe(double3.anchor.left);
   });
 
   it("wraps the left arm upward when reaching the left border", () => {

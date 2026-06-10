@@ -109,6 +109,13 @@ function ensureHorizontal(tile: PlacedTileStyle) {
   tile.height = BOARD_TILE.hH;
 }
 
+/** Fuerza horizontal incluso en dobles (fila RTL/LTR de la serpiente). */
+function forceHorizontal(tile: PlacedTileStyle) {
+  tile.orientation = "horizontal";
+  tile.width = BOARD_TILE.hW;
+  tile.height = BOARD_TILE.hH;
+}
+
 function placeDownFromRight(prev: PlacedTileStyle, tile: PlacedTileStyle): TileAnchor {
   ensureVerticalTurn(tile);
   const prevLeft = prev.anchor.left ?? 0;
@@ -183,6 +190,7 @@ function placeDoubleAfterHorizontalRtl(
   const prev = styles[prevIdx]!;
   const rowCenterY = (prev.anchor.top ?? 0) + prev.height / 2;
   const slotLeft = prev.anchor.left ?? 0;
+  forceHorizontal(tile);
   setAttach(tile, "right");
   // La primera ficha de la fila queda anclada al vertical; solo retroceden las siguientes.
   if (prevIdx > rowStartIdx) {
@@ -194,12 +202,30 @@ function placeDoubleAfterHorizontalRtl(
   };
 }
 
-/** Doble en esquina vertical (misma columna que el vertical de giro). */
-function inheritCornerSlot(neighbor: PlacedTileStyle, tile: PlacedTileStyle): TileAnchor {
-  setAttach(tile, "right");
+/** Doble tras vertical de giro hacia abajo: debajo, misma columna. */
+function placeDoubleBelowVerticalCorner(
+  neighbor: PlacedTileStyle,
+  tile: PlacedTileStyle,
+): TileAnchor {
+  setAttach(tile, "top");
   return {
     left: neighbor.anchor.left ?? 0,
-    top: neighbor.anchor.top ?? 0,
+    top: (neighbor.anchor.top ?? 0) + neighbor.height + BOARD_TILE.gap,
+  };
+}
+
+/** Doble tras vertical de giro hacia arriba: horizontal encima, centrado en la columna. */
+function placeDoubleAboveVerticalCorner(
+  neighbor: PlacedTileStyle,
+  tile: PlacedTileStyle,
+): TileAnchor {
+  forceHorizontal(tile);
+  setAttach(tile, "bottom");
+  const neighborLeft = neighbor.anchor.left ?? 0;
+  const neighborTop = neighbor.anchor.top ?? 0;
+  return {
+    left: neighborLeft + neighbor.width / 2 - tile.width / 2,
+    top: neighborTop - tile.height - BOARD_TILE.gap,
   };
 }
 
@@ -244,6 +270,21 @@ function placeHorizontalAboveVerticalLeft(
   const prevTop = prev.anchor.top ?? 0;
   return {
     left: prevLeft + prev.width / 2 - tile.width,
+    top: prevTop - tile.height - BOARD_TILE.gap,
+  };
+}
+
+/** Ficha vertical encima de un doble de esquina (misma columna). */
+function placeVerticalAboveCornerDouble(
+  prev: PlacedTileStyle,
+  tile: PlacedTileStyle,
+): TileAnchor {
+  ensureVerticalTurn(tile);
+  setAttach(tile, "bottom");
+  const prevLeft = prev.anchor.left ?? 0;
+  const prevTop = prev.anchor.top ?? 0;
+  return {
+    left: prevLeft,
     top: prevTop - tile.height - BOARD_TILE.gap,
   };
 }
@@ -299,17 +340,19 @@ function walkRightArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bo
     const tile = styles[i]!;
 
     if (pendingRowStart === "rtl") {
-      if (
+      if (prev.orientation === "vertical" && tile.leftValue === tile.rightValue) {
+        tile.anchor = placeDoubleBelowVerticalCorner(prev, tile);
+        pendingRowStart = "rtl";
+      } else if (
         prev.orientation === "vertical" &&
         tile.leftValue !== tile.rightValue
       ) {
         tile.anchor = placeHorizontalBelowVerticalRight(prev, tile);
-      } else if (columnLeft !== null && tile.leftValue === tile.rightValue) {
-        tile.anchor = inheritCornerSlot(prev, tile);
+        pendingRowStart = null;
       } else {
         tile.anchor = placeAfterCornerRtl(prev, tile, columnLeft);
+        pendingRowStart = null;
       }
-      pendingRowStart = null;
       hDir = -1;
       rowStartIndex = i;
       prev.playAttach = "left";
@@ -317,8 +360,13 @@ function walkRightArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bo
       continue;
     }
     if (pendingRowStart === "ltr") {
-      tile.anchor = placeAfterCornerLtr(prev, tile);
-      pendingRowStart = null;
+      if (prev.orientation === "vertical" && tile.leftValue === tile.rightValue) {
+        tile.anchor = placeDoubleBelowVerticalCorner(prev, tile);
+        pendingRowStart = "rtl";
+      } else {
+        tile.anchor = placeAfterCornerLtr(prev, tile);
+        pendingRowStart = null;
+      }
       hDir = 1;
       rowStartIndex = i;
       prev.playAttach = "right";
@@ -393,23 +441,38 @@ function walkLeftArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bou
     const tile = styles[i]!;
 
     if (pendingRowStart === "ltr") {
-      if (
+      if (prev.orientation === "vertical" && tile.leftValue === tile.rightValue) {
+        tile.anchor = placeDoubleAboveVerticalCorner(prev, tile);
+        pendingRowStart = "ltr";
+      } else if (
+        prev.leftValue === prev.rightValue &&
+        tile.leftValue !== tile.rightValue
+      ) {
+        tile.anchor = placeVerticalAboveCornerDouble(prev, tile);
+        pendingRowStart = null;
+      } else if (
         prev.orientation === "vertical" &&
         tile.leftValue !== tile.rightValue
       ) {
         tile.anchor = placeHorizontalAboveVerticalLeft(prev, tile);
+        pendingRowStart = null;
       } else {
         tile.anchor = placeAfterCornerLtr(prev, tile);
+        pendingRowStart = null;
       }
-      pendingRowStart = null;
       hDir = 1;
       prev.playAttach = "right";
       prev = tile;
       continue;
     }
     if (pendingRowStart === "rtl") {
-      tile.anchor = placeAfterCornerRtl(prev, tile, null);
-      pendingRowStart = null;
+      if (prev.orientation === "vertical" && tile.leftValue === tile.rightValue) {
+        tile.anchor = placeDoubleAboveVerticalCorner(prev, tile);
+        pendingRowStart = "ltr";
+      } else {
+        tile.anchor = placeAfterCornerRtl(prev, tile, null);
+        pendingRowStart = null;
+      }
       hDir = -1;
       prev.playAttach = "left";
       prev = tile;
