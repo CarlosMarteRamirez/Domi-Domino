@@ -389,20 +389,24 @@ function walkRightArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bo
         prev.playAttach = "left";
         hDir = -1;
       }
-    } else if (
-      columnLeft !== null &&
-      tile.leftValue === tile.rightValue &&
-      prev.orientation === "horizontal"
-    ) {
-      const rowStart = rowStartIndex ?? anchorIndex + 1;
-      tile.anchor = placeDoubleAfterHorizontalRtl(styles, rowStart, i - 1, tile);
-      prev.playAttach = "left";
     } else {
-      ensureHorizontal(tile);
+      if (tile.leftValue === tile.rightValue) {
+        forceHorizontal(tile);
+      } else {
+        ensureHorizontal(tile);
+      }
       const left = (prev.anchor.left ?? 0) - tile.width - BOARD_TILE.gap;
       if (left >= bounds.minLeft) {
         tile.anchor = { left, top: alignTop(prev, tile) };
         setAttach(tile, "right");
+        prev.playAttach = "left";
+      } else if (
+        columnLeft !== null &&
+        tile.leftValue === tile.rightValue &&
+        prev.orientation === "horizontal"
+      ) {
+        const rowStart = rowStartIndex ?? anchorIndex + 1;
+        tile.anchor = placeDoubleAfterHorizontalRtl(styles, rowStart, i - 1, tile);
         prev.playAttach = "left";
       } else if (prev.orientation === "vertical") {
         tile.anchor = placeHorizontalBelowVerticalFlush(prev, tile);

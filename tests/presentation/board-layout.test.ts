@@ -318,6 +318,36 @@ describe("computeChainLayout", () => {
     expect(tile31.anchor.left).toBe(double3.anchor.left);
   });
 
+  it("places a double at the RTL row end to the left of the previous tile, without shifting the row", () => {
+    const tiles: Parameters<typeof computeChainLayout>[0] = [
+      { leftValue: 4, rightValue: 4, side: "first" },
+      { leftValue: 5, rightValue: 4, side: "right" },
+      { leftValue: 0, rightValue: 5, side: "right" },
+      { leftValue: 4, rightValue: 0, side: "right" },
+      { leftValue: 6, rightValue: 4, side: "right" },
+      { leftValue: 5, rightValue: 6, side: "right" },
+      { leftValue: 1, rightValue: 5, side: "right" },
+      { leftValue: 5, rightValue: 5, side: "right" },
+    ];
+
+    const styles = computeChainLayout(tiles, CHAIN_W, CHAIN_H);
+    const double5 = styles.find((s) => s.leftValue === 5 && s.rightValue === 5)!;
+    const tile51 = styles.find(
+      (s) =>
+        (s.leftValue === 5 && s.rightValue === 1) ||
+        (s.leftValue === 1 && s.rightValue === 5),
+    )!;
+    const tile56 = styles.find(
+      (s) =>
+        (s.leftValue === 5 && s.rightValue === 6) ||
+        (s.leftValue === 6 && s.rightValue === 5),
+    )!;
+
+    expect(double5.orientation).toBe("horizontal");
+    expect(double5.anchor.left! + double5.width + BOARD_TILE.gap).toBe(tile51.anchor.left);
+    expect(tile56.anchor.left).toBe(tile51.anchor.left! + tile51.width + BOARD_TILE.gap);
+  });
+
   it("wraps the left arm upward when reaching the left border", () => {
     const tiles: ReturnType<typeof horizontalTile>[] = [];
     for (let i = 0; i < 8; i++) tiles.push(horizontalTile(i, i + 1, "left"));
