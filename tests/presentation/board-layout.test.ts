@@ -343,7 +343,7 @@ describe("computeChainLayout", () => {
         (s.leftValue === 6 && s.rightValue === 5),
     )!;
 
-    expect(double5.orientation).toBe("horizontal");
+    expect(double5.orientation).toBe("vertical");
     expect(double5.anchor.left! + double5.width + BOARD_TILE.gap).toBe(tile51.anchor.left);
     expect(tile56.anchor.left).toBe(tile51.anchor.left! + tile51.width + BOARD_TILE.gap);
   });
