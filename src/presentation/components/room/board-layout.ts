@@ -86,7 +86,7 @@ function buildStyle(tile: BoardTileInput, isOpening: boolean): PlacedTileStyle {
 
 function alignTop(neighbor: PlacedTileStyle, tile: PlacedTileStyle): number {
   const neighborTop = neighbor.anchor.top ?? 0;
-  return neighborTop + neighbor.height / 2 - tile.height / 2;
+  return neighborTop + (neighbor.height - tile.height) / 2;
 }
 
 function setAttach(tile: PlacedTileStyle, from: AttachSide) {
@@ -239,7 +239,7 @@ function placeHorizontalBelowVerticalRight(
   const prevLeft = prev.anchor.left ?? 0;
   const prevTop = prev.anchor.top ?? 0;
   return {
-    left: prevLeft + prev.width / 2,
+    left: prevLeft - prev.width,
     top: prevTop + prev.height + BOARD_TILE.gap,
   };
 }
@@ -284,7 +284,7 @@ function placeVerticalAboveCornerDouble(
   const prevLeft = prev.anchor.left ?? 0;
   const prevTop = prev.anchor.top ?? 0;
   return {
-    left: prevLeft,
+    left: prevLeft + prev.width / 4,//+ 24,
     top: prevTop - tile.height - BOARD_TILE.gap,
   };
 }
@@ -496,7 +496,7 @@ function walkLeftArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bou
       ensureHorizontal(tile);
       const left = (prev.anchor.left ?? 0) + prev.width + BOARD_TILE.gap;
       if (left + tile.width <= bounds.maxRight) {
-        tile.anchor = { left, top: alignTop(prev, tile) };
+        tile.anchor = { left, top: alignTop(prev, tile) * 3 };
         setAttach(tile, "left");
         prev.playAttach = "right";
       } else {
