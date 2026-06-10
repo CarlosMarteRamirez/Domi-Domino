@@ -345,6 +345,7 @@ describe("computeChainLayout", () => {
     expect(tile14.orientation).toBe("vertical");
     expect(tile10.orientation).toBe("horizontal");
     expect(tile14.anchor.top!).toBe(double1.anchor.top! + double1.height + BOARD_TILE.gap);
+    expect(tile10.anchor.top!).toBe(tile14.anchor.top! + tile14.height - tile10.height);
     expect(tile10.anchor.left! + tile10.width + BOARD_TILE.gap).toBeLessThanOrEqual(tile14.anchor.left!);
   });
 

@@ -94,6 +94,14 @@ function horizontalRowTopAfterVertical(prev: PlacedTileStyle): number {
   return prev.anchor.top ?? 0;
 }
 
+/** Primera horizontal RTL tras vertical bajo doble de esquina: alinea con la mitad inferior. */
+function alignFirstRtlBesideVerticalBelowDouble(
+  vertical: PlacedTileStyle,
+  tile: PlacedTileStyle,
+): number {
+  return (vertical.anchor.top ?? 0) + vertical.height - tile.height;
+}
+
 function setAttach(tile: PlacedTileStyle, from: AttachSide) {
   tile.attachFrom = from;
 }
@@ -360,6 +368,8 @@ function walkRightArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bo
   let pendingRowStart: "rtl" | "ltr" | null = null;
   let columnLeft: number | null = null;
   let rowStartIndex: number | null = null;
+  /** Solo la 1.ª horizontal RTL tras placeVerticalBelowCornerDouble. */
+  let rtlBesideVerticalBelowDouble = false;
   let prev = styles[anchorIndex]!;
   prev.playAttach = "right";
 
@@ -376,6 +386,7 @@ function walkRightArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bo
       ) {
         tile.anchor = placeVerticalBelowCornerDouble(prev, tile);
         pendingRowStart = null;
+        rtlBesideVerticalBelowDouble = true;
       } else if (
         prev.orientation === "vertical" &&
         tile.leftValue !== tile.rightValue
@@ -428,7 +439,12 @@ function walkRightArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bo
       }
       const left = (prev.anchor.left ?? 0) - tile.width - BOARD_TILE.gap;
       if (left >= bounds.minLeft) {
-        tile.anchor = { left, top: alignTop(prev, tile) };
+        const top =
+          rtlBesideVerticalBelowDouble && prev.orientation === "vertical"
+            ? alignFirstRtlBesideVerticalBelowDouble(prev, tile)
+            : alignTop(prev, tile);
+        rtlBesideVerticalBelowDouble = false;
+        tile.anchor = { left, top };
         setAttach(tile, "right");
         prev.playAttach = "left";
       } else if (
