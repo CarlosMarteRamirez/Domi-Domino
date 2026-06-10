@@ -479,12 +479,6 @@ export const BoardView = React.forwardRef<BoardViewHandle, Props>(function Board
         </div>
       )}
 
-      {!isEmpty && board.leftEnd !== null && (
-        <p className="pointer-events-none mt-2 text-xs text-domino-cream/60">
-          Extremos: {board.leftEnd} — {board.rightEnd}
-        </p>
-      )}
-
       {hasSelection && isDraggingOver && (
         <p className="pointer-events-none text-xs text-domino-cream/60">
           Suelta cerca del extremo donde quieras jugar
