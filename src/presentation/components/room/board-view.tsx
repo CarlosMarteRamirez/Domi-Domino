@@ -10,8 +10,8 @@ import {
   BOARD_TILE,
   SIDE_RESERVE,
   anchorToCss,
-  computeChainLayout,
   getChainExtent,
+  layoutChainForView,
   openingTileToCss,
   predictNextTileStyle,
   type PlacedTileStyle,
@@ -164,7 +164,7 @@ export const BoardView = React.forwardRef<BoardViewHandle, Props>(function Board
     if (!board || board.clientWidth <= 0) return;
     setChainSize({
       w: board.clientWidth - 48,
-      h: Math.max(300, chain?.clientHeight ?? 0, board.clientHeight - 120),
+      h: Math.max(300, board.clientHeight - 48),
     });
   }, []);
 
@@ -191,7 +191,7 @@ export const BoardView = React.forwardRef<BoardViewHandle, Props>(function Board
 
   const placedStyles = React.useMemo(() => {
     if (board.tiles.length === 0 || chainSize.w <= 0) return [];
-    return computeChainLayout(boardTileInputs, chainSize.w, chainSize.h);
+    return layoutChainForView(boardTileInputs, chainSize.w, chainSize.h);
   }, [board.tiles.length, boardTileInputs, chainSize.w, chainSize.h]);
 
   const placementPreview = React.useMemo((): {

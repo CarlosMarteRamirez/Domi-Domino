@@ -318,6 +318,36 @@ describe("computeChainLayout", () => {
     expect(tile31.anchor.left).toBe(double3.anchor.left);
   });
 
+  it("places a horizontal double below a down-turn, then vertical, then RTL row", () => {
+    const tiles: Parameters<typeof computeChainLayout>[0] = [
+      { leftValue: 6, rightValue: 6, side: "first" },
+      { leftValue: 6, rightValue: 3, side: "right" },
+      { leftValue: 1, rightValue: 6, side: "right" },
+      { leftValue: 1, rightValue: 1, side: "right" },
+      { leftValue: 1, rightValue: 4, side: "right" },
+      { leftValue: 1, rightValue: 0, side: "right" },
+    ];
+
+    const styles = computeChainLayout(tiles, 420, CHAIN_H);
+    const double1 = styles.find((s) => s.leftValue === 1 && s.rightValue === 1)!;
+    const tile14 = styles.find(
+      (s) =>
+        (s.leftValue === 1 && s.rightValue === 4) ||
+        (s.leftValue === 4 && s.rightValue === 1),
+    )!;
+    const tile10 = styles.find(
+      (s) =>
+        (s.leftValue === 1 && s.rightValue === 0) ||
+        (s.leftValue === 0 && s.rightValue === 1),
+    )!;
+
+    expect(double1.orientation).toBe("horizontal");
+    expect(tile14.orientation).toBe("vertical");
+    expect(tile10.orientation).toBe("horizontal");
+    expect(tile14.anchor.top!).toBe(double1.anchor.top! + double1.height + BOARD_TILE.gap);
+    expect(tile10.anchor.left! + tile10.width + BOARD_TILE.gap).toBeLessThanOrEqual(tile14.anchor.left!);
+  });
+
   it("places a double at the RTL row end to the left of the previous tile, without shifting the row", () => {
     const tiles: Parameters<typeof computeChainLayout>[0] = [
       { leftValue: 4, rightValue: 4, side: "first" },

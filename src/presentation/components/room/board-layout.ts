@@ -122,7 +122,11 @@ function forceHorizontal(tile: PlacedTileStyle) {
 }
 
 function placeDownFromRight(prev: PlacedTileStyle, tile: PlacedTileStyle): TileAnchor {
-  ensureVerticalTurn(tile);
+  if (tile.leftValue === tile.rightValue) {
+    forceHorizontal(tile);
+  } else {
+    ensureVerticalTurn(tile);
+  }
   const prevLeft = prev.anchor.left ?? 0;
   const prevTop = prev.anchor.top ?? 0;
   setAttach(tile, "top");
@@ -207,15 +211,18 @@ function placeDoubleAfterHorizontalRtl(
   };
 }
 
-/** Doble tras vertical de giro hacia abajo: debajo, misma columna. */
+/** Doble tras vertical de giro hacia abajo: horizontal debajo, centrado en la columna. */
 function placeDoubleBelowVerticalCorner(
   neighbor: PlacedTileStyle,
   tile: PlacedTileStyle,
 ): TileAnchor {
+  forceHorizontal(tile);
   setAttach(tile, "top");
+  const neighborLeft = neighbor.anchor.left ?? 0;
+  const neighborTop = neighbor.anchor.top ?? 0;
   return {
-    left: neighbor.anchor.left ?? 0,
-    top: (neighbor.anchor.top ?? 0) + neighbor.height + BOARD_TILE.gap,
+    left: neighborLeft + neighbor.width / 2 - tile.width / 2,
+    top: neighborTop + neighbor.height + BOARD_TILE.gap,
   };
 }
 
@@ -274,7 +281,7 @@ function placeHorizontalAboveVerticalLeft(
   const prevLeft = prev.anchor.left ?? 0;
   const prevTop = prev.anchor.top ?? 0;
   return {
-    left: prevLeft + prev.width / 2 - tile.width,
+    left: (prevLeft + prev.width) * 1.75 - tile.width,
     top: prevTop - tile.height - BOARD_TILE.gap,
   };
 }
@@ -291,6 +298,21 @@ function placeVerticalAboveCornerDouble(
   return {
     left: prevLeft + prev.width / 4,//+ 24,
     top: prevTop - tile.height - BOARD_TILE.gap,
+  };
+}
+
+/** Ficha vertical debajo de un doble horizontal de esquina (misma columna). */
+function placeVerticalBelowCornerDouble(
+  prev: PlacedTileStyle,
+  tile: PlacedTileStyle,
+): TileAnchor {
+  ensureVerticalTurn(tile);
+  setAttach(tile, "top");
+  const prevLeft = prev.anchor.left ?? 0;
+  const prevTop = prev.anchor.top ?? 0;
+  return {
+    left: prevLeft + prev.width / 4,
+    top: prevTop + prev.height + BOARD_TILE.gap,
   };
 }
 
@@ -348,6 +370,12 @@ function walkRightArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bo
       if (prev.orientation === "vertical" && tile.leftValue === tile.rightValue) {
         tile.anchor = placeDoubleBelowVerticalCorner(prev, tile);
         pendingRowStart = "rtl";
+      } else if (
+        prev.leftValue === prev.rightValue &&
+        tile.leftValue !== tile.rightValue
+      ) {
+        tile.anchor = placeVerticalBelowCornerDouble(prev, tile);
+        pendingRowStart = null;
       } else if (
         prev.orientation === "vertical" &&
         tile.leftValue !== tile.rightValue
@@ -565,6 +593,17 @@ function shiftVerticalIntoView(styles: PlacedTileStyle[]) {
   }
 }
 
+/** Centra el bloque de fichas en el alto visible del contenedor. */
+export function centerChainInContainer(styles: PlacedTileStyle[], containerHeight: number) {
+  const extent = getChainExtent(styles);
+  if (!extent) return;
+  const contentMid = extent.minTop + (extent.maxBottom - extent.minTop) / 2;
+  const dy = containerHeight / 2 - contentMid;
+  for (const s of styles) {
+    s.anchor.top = (s.anchor.top ?? 0) + dy;
+  }
+}
+
 export function getChainExtent(styles: PlacedTileStyle[]): ChainExtent | null {
   if (styles.length === 0) return null;
   let minLeft = Infinity;
@@ -620,7 +659,7 @@ export function predictNextTileStyle(
       ? [{ ...nextTile, side: "left" }, ...tiles]
       : [...tiles, { ...nextTile, side: "right" }];
 
-  const styles = computeChainLayout(extended, chainWidth, chainHeight);
+  const styles = layoutChainForView(extended, chainWidth, chainHeight);
   return side === "left" ? (styles[0] ?? null) : (styles[styles.length - 1] ?? null);
 }
 
@@ -651,6 +690,19 @@ export function computeChainLayout(
   shiftVerticalIntoView(styles);
   applyRowReversal(styles, anchorIndex);
 
+  return styles;
+}
+
+/** Layout + centrado vertical en el contenedor visible del tablero. */
+export function layoutChainForView(
+  tiles: BoardTileInput[],
+  chainWidth: number,
+  chainHeight: number,
+): PlacedTileStyle[] {
+  const styles = computeChainLayout(tiles, chainWidth, chainHeight);
+  const extent = getChainExtent(styles);
+  const containerH = extent ? Math.max(300, extent.maxBottom + SIDE_RESERVE) : 300;
+  centerChainInContainer(styles, containerH);
   return styles;
 }
 
