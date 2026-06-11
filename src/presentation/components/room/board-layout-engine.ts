@@ -1,28 +1,54 @@
-import type { CSSProperties } from "react";
 import type { Side } from "@/domain/domino/types";
 
-/** Tamaños fijos de ficha en el tablero (px). */
-export const BOARD_TILE = {
-  hW: 88,
-  hH: 44,
-  vW: 44,
-  vH: 88,
-  gap: 2,
-} as const;
+/**
+ * Board Layout Engine — edge-connected snake layout in logical units.
+ * Ported from the proven legacy board-layout (bounds-aware wrapping).
+ * UNIT=1 is the short tile side; renderer scales to pixels.
+ */
 
-/** Margen mínimo al borde del tablero antes de girar. */
-export const SIDE_RESERVE = 12;
+export const UNIT = 1;
+export const LONG = 2;
+export const GAP = 2 / 44;
+export const RESERVE = 12 / 44;
+export const MIN_BOARD_H = 300 / 44;
 
-export type TileOrientation = "horizontal" | "vertical";
+export type Orientation = "horizontal" | "vertical";
 
-/** Lado por donde se conecta la siguiente ficha o la zona de juego. */
-export type AttachSide = "left" | "right" | "top" | "bottom";
-
-export type BoardTileInput = {
+export interface BoardTileInput {
   leftValue: number;
   rightValue: number;
   side?: Side | "first";
-};
+}
+
+export interface PositionedTile {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  orientation: Orientation;
+  rotation: number;
+  reversed: boolean;
+  leftValue: number;
+  rightValue: number;
+  isOpening: boolean;
+  isCorner: boolean;
+}
+
+export interface LayoutExtent {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  width: number;
+  height: number;
+}
+
+
+type TileOrientation = Orientation;
+
+/** Lado por donde se conecta la siguiente ficha o la zona de juego. */
+type AttachSide = "left" | "right" | "top" | "bottom";
 
 export type TileAnchor = {
   left?: number;
@@ -31,7 +57,7 @@ export type TileAnchor = {
   bottom?: number;
 };
 
-export interface PlacedTileStyle {
+interface PlacedTileStyle {
   anchor: TileAnchor;
   orientation: TileOrientation;
   width: number;
@@ -47,7 +73,7 @@ export interface PlacedTileStyle {
   reversed?: boolean;
 }
 
-export interface ChainExtent {
+interface ChainExtent {
   minLeft: number;
   minTop: number;
   maxRight: number;
@@ -67,8 +93,8 @@ function tileOrientation(tile: BoardTileInput): TileOrientation {
 
 function tileSize(orientation: TileOrientation) {
   return orientation === "horizontal"
-    ? { width: BOARD_TILE.hW, height: BOARD_TILE.hH }
-    : { width: BOARD_TILE.vW, height: BOARD_TILE.vH };
+    ? { width: LONG, height: UNIT }
+    : { width: UNIT, height: LONG };
 }
 
 function buildStyle(tile: BoardTileInput, isOpening: boolean): PlacedTileStyle {
@@ -127,30 +153,30 @@ function setAttach(tile: PlacedTileStyle, from: AttachSide) {
 function ensureVerticalTurn(tile: PlacedTileStyle) {
   if (tile.leftValue === tile.rightValue) return;
   tile.orientation = "vertical";
-  tile.width = BOARD_TILE.vW;
-  tile.height = BOARD_TILE.vH;
+  tile.width = UNIT;
+  tile.height = LONG;
 }
 
 /** Tramo horizontal de la serpiente. */
 function ensureHorizontal(tile: PlacedTileStyle) {
   if (tile.leftValue === tile.rightValue) return;
   tile.orientation = "horizontal";
-  tile.width = BOARD_TILE.hW;
-  tile.height = BOARD_TILE.hH;
+  tile.width = LONG;
+  tile.height = UNIT;
 }
 
 /** Fuerza horizontal incluso en dobles (fila RTL/LTR de la serpiente). */
 function forceHorizontal(tile: PlacedTileStyle) {
   tile.orientation = "horizontal";
-  tile.width = BOARD_TILE.hW;
-  tile.height = BOARD_TILE.hH;
+  tile.width = LONG;
+  tile.height = UNIT;
 }
 
 /** Fuerza vertical incluso en dobles. */
 function forceVertical(tile: PlacedTileStyle) {
   tile.orientation = "vertical";
-  tile.width = BOARD_TILE.vW;
-  tile.height = BOARD_TILE.vH;
+  tile.width = UNIT;
+  tile.height = LONG;
 }
 
 /**
@@ -173,8 +199,8 @@ function placeDoubleInRow(
   orientDoubleAfterPrev(prev, tile);
   const left =
     hDir === 1
-      ? (prev.anchor.left ?? 0) + prev.width + BOARD_TILE.gap
-      : (prev.anchor.left ?? 0) - tile.width - BOARD_TILE.gap;
+      ? (prev.anchor.left ?? 0) + prev.width + GAP
+      : (prev.anchor.left ?? 0) - tile.width - GAP;
   return { left, top: alignTop(prev, tile) };
 }
 
@@ -189,7 +215,7 @@ function placeDownFromRight(prev: PlacedTileStyle, tile: PlacedTileStyle): TileA
   setAttach(tile, "top");
   return {
     left: prevLeft + prev.width - tile.width,
-    top: prevTop + prev.height + BOARD_TILE.gap,
+    top: prevTop + prev.height + GAP,
   };
 }
 
@@ -200,7 +226,7 @@ function placeDownFromLeft(prev: PlacedTileStyle, tile: PlacedTileStyle): TileAn
   setAttach(tile, "top");
   return {
     left: prevLeft,
-    top: prevTop + prev.height + BOARD_TILE.gap,
+    top: prevTop + prev.height + GAP,
   };
 }
 
@@ -211,7 +237,7 @@ function placeUpFromLeft(prev: PlacedTileStyle, tile: PlacedTileStyle): TileAnch
   setAttach(tile, "bottom");
   return {
     left: prevLeft,
-    top: prevTop - tile.height - BOARD_TILE.gap,
+    top: prevTop - tile.height - GAP,
   };
 }
 
@@ -222,13 +248,13 @@ function placeUpFromRight(prev: PlacedTileStyle, tile: PlacedTileStyle): TileAnc
   setAttach(tile, "bottom");
   return {
     left: prevLeft + prev.width - tile.width,
-    top: prevTop - tile.height - BOARD_TILE.gap,
+    top: prevTop - tile.height - GAP,
   };
 }
 
 function isSameRowBand(style: PlacedTileStyle, rowCenterY: number): boolean {
   const centerY = (style.anchor.top ?? 0) + style.height / 2;
-  return Math.abs(centerY - rowCenterY) <= BOARD_TILE.hH / 2 + 2;
+  return Math.abs(centerY - rowCenterY) <= UNIT / 2 + 2;
 }
 
 /** Desplaza toda la fila un espacio hacia atrás (RTL: hacia la izquierda). */
@@ -238,7 +264,7 @@ function shiftArmRowLeft(
   toIdx: number,
   rowCenterY: number,
 ) {
-  const shift = BOARD_TILE.hW + BOARD_TILE.gap;
+  const shift = LONG + GAP;
   for (let j = fromIdx; j <= toIdx; j++) {
     const s = styles[j]!;
     if (!isSameRowBand(s, rowCenterY)) continue;
@@ -279,7 +305,7 @@ function placeDoubleBelowVerticalCorner(
   const neighborTop = neighbor.anchor.top ?? 0;
   return {
     left: neighborLeft + neighbor.width / 2 - tile.width / 2,
-    top: neighborTop + neighbor.height + BOARD_TILE.gap,
+    top: neighborTop + neighbor.height + GAP,
   };
 }
 
@@ -294,7 +320,7 @@ function placeDoubleAboveVerticalCorner(
   const neighborTop = neighbor.anchor.top ?? 0;
   return {
     left: neighborLeft + neighbor.width / 2 - tile.width / 2,
-    top: neighborTop - tile.height - BOARD_TILE.gap,
+    top: neighborTop - tile.height - GAP,
   };
 }
 
@@ -309,7 +335,7 @@ function placeHorizontalBelowVerticalRight(
   const prevTop = prev.anchor.top ?? 0;
   return {
     left: prevLeft - prev.width,
-    top: prevTop + prev.height + BOARD_TILE.gap,
+    top: prevTop + prev.height + GAP,
   };
 }
 
@@ -324,7 +350,7 @@ function placeHorizontalBelowVerticalFlush(
   const prevTop = prev.anchor.top ?? 0;
   return {
     left: prevLeft + prev.width / 2,
-    top: prevTop + prev.height + BOARD_TILE.gap,
+    top: prevTop + prev.height + GAP,
   };
 }
 
@@ -339,7 +365,7 @@ function placeHorizontalAboveVerticalLeft(
   const prevTop = prev.anchor.top ?? 0;
   return {
     left: (prevLeft + prev.width) * 1.75 - tile.width,
-    top: prevTop - tile.height - BOARD_TILE.gap,
+    top: prevTop - tile.height - GAP,
   };
 }
 
@@ -354,7 +380,7 @@ function placeVerticalAboveCornerDouble(
   const prevTop = prev.anchor.top ?? 0;
   return {
     left: prevLeft + prev.width / 4,//+ 24,
-    top: prevTop - tile.height - BOARD_TILE.gap,
+    top: prevTop - tile.height - GAP,
   };
 }
 
@@ -369,7 +395,7 @@ function placeVerticalBelowCornerDouble(
   const prevTop = prev.anchor.top ?? 0;
   return {
     left: prevLeft + prev.width / 4,
-    top: prevTop + prev.height + BOARD_TILE.gap,
+    top: prevTop + prev.height + GAP,
   };
 }
 
@@ -383,7 +409,7 @@ function placeDownInColumn(
   setAttach(tile, "top");
   return {
     left: columnLeft,
-    top: (prev.anchor.top ?? 0) + prev.height + BOARD_TILE.gap,
+    top: (prev.anchor.top ?? 0) + prev.height + GAP,
   };
 }
 
@@ -401,7 +427,7 @@ function placeAfterCornerRtl(
   setAttach(tile, "right");
   const anchorLeft = columnLeft ?? corner.anchor.left ?? 0;
   return {
-    left: anchorLeft - tile.width - BOARD_TILE.gap,
+    left: anchorLeft - tile.width - GAP,
     top: alignTop(corner, tile),
   };
 }
@@ -415,7 +441,7 @@ function placeAfterCornerLtr(corner: PlacedTileStyle, tile: PlacedTileStyle): Ti
   }
   setAttach(tile, "left");
   return {
-    left: (corner.anchor.left ?? 0) + corner.width + BOARD_TILE.gap,
+    left: (corner.anchor.left ?? 0) + corner.width + GAP,
     top: alignTop(corner, tile),
   };
 }
@@ -477,7 +503,7 @@ function walkRightArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bo
 
     if (hDir === 1) {
       if (tile.leftValue === tile.rightValue) {
-        const left = (prev.anchor.left ?? 0) + prev.width + BOARD_TILE.gap;
+        const left = (prev.anchor.left ?? 0) + prev.width + GAP;
         if (left + tile.width <= bounds.maxRight) {
           tile.anchor = placeDoubleInRow(prev, tile, 1);
           setAttach(tile, "left");
@@ -492,7 +518,7 @@ function walkRightArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bo
         }
       } else {
         ensureHorizontal(tile);
-        const left = (prev.anchor.left ?? 0) + prev.width + BOARD_TILE.gap;
+        const left = (prev.anchor.left ?? 0) + prev.width + GAP;
         if (left + tile.width <= bounds.maxRight) {
           tile.anchor = { left, top: alignTop(prev, tile) };
           setAttach(tile, "left");
@@ -507,7 +533,7 @@ function walkRightArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bo
         }
       }
     } else {
-      const left = (prev.anchor.left ?? 0) - tile.width - BOARD_TILE.gap;
+      const left = (prev.anchor.left ?? 0) - tile.width - GAP;
       const isRightArmEnd = i === styles.length - 1;
       const turnDownAtTopRowEnd =
         isRightArmEnd &&
@@ -625,7 +651,7 @@ function walkLeftArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bou
     }
 
     if (hDir === -1) {
-      const left = (prev.anchor.left ?? 0) - tile.width - BOARD_TILE.gap;
+      const left = (prev.anchor.left ?? 0) - tile.width - GAP;
       if (left >= bounds.minLeft) {
         if (tile.leftValue === tile.rightValue) {
           tile.anchor = placeDoubleInRow(prev, tile, -1);
@@ -653,7 +679,7 @@ function walkLeftArm(styles: PlacedTileStyle[], anchorIndex: number, bounds: Bou
         hDir = 1;
       }
     } else {
-      const left = (prev.anchor.left ?? 0) + prev.width + BOARD_TILE.gap;
+      const left = (prev.anchor.left ?? 0) + prev.width + GAP;
       if (left + tile.width <= bounds.maxRight) {
         if (tile.leftValue === tile.rightValue) {
           tile.anchor = placeDoubleInRow(prev, tile, 1);
@@ -701,7 +727,7 @@ function applyRowReversal(styles: PlacedTileStyle[], anchorIndex: number) {
   const anchor = styles[anchorIndex];
   if (!anchor) return;
   const middleY = (anchor.anchor.top ?? 0) + anchor.height / 2;
-  const rowBand = BOARD_TILE.hH / 2 + BOARD_TILE.gap;
+  const rowBand = UNIT / 2 + GAP;
 
   for (const tile of styles) {
     if (tile.orientation !== "horizontal") continue;
@@ -713,8 +739,8 @@ function applyRowReversal(styles: PlacedTileStyle[], anchorIndex: number) {
 function shiftVerticalIntoView(styles: PlacedTileStyle[]) {
   if (styles.length === 0) return;
   const minTop = Math.min(...styles.map((s) => s.anchor.top ?? 0));
-  if (minTop < SIDE_RESERVE) {
-    const dy = SIDE_RESERVE - minTop;
+  if (minTop < RESERVE) {
+    const dy = RESERVE - minTop;
     for (const s of styles) {
       s.anchor.top = (s.anchor.top ?? 0) + dy;
     }
@@ -722,7 +748,7 @@ function shiftVerticalIntoView(styles: PlacedTileStyle[]) {
 }
 
 /** Centra el bloque de fichas en el alto visible del contenedor. */
-export function centerChainInContainer(styles: PlacedTileStyle[], containerHeight: number) {
+function centerChainInContainer(styles: PlacedTileStyle[], containerHeight: number) {
   const extent = getChainExtent(styles);
   if (!extent) return;
   const contentMid = extent.minTop + (extent.maxBottom - extent.minTop) / 2;
@@ -732,7 +758,7 @@ export function centerChainInContainer(styles: PlacedTileStyle[], containerHeigh
   }
 }
 
-export function getChainExtent(styles: PlacedTileStyle[]): ChainExtent | null {
+function getChainExtent(styles: PlacedTileStyle[]): ChainExtent | null {
   if (styles.length === 0) return null;
   let minLeft = Infinity;
   let minTop = Infinity;
@@ -749,31 +775,9 @@ export function getChainExtent(styles: PlacedTileStyle[]): ChainExtent | null {
   return { minLeft, minTop, maxRight, maxBottom };
 }
 
-export function zoneAnchorForAttach(
-  tileAnchor: TileAnchor,
-  tileW: number,
-  tileH: number,
-  attach: AttachSide,
-  zoneW: number,
-  zoneH: number,
-): TileAnchor {
-  const gap = 10;
-  const left = tileAnchor.left ?? 0;
-  const top = tileAnchor.top ?? 0;
-  switch (attach) {
-    case "left":
-      return { left: left - gap - zoneW, top: top + tileH / 2 - zoneH / 2 };
-    case "right":
-      return { left: left + tileW + gap, top: top + tileH / 2 - zoneH / 2 };
-    case "top":
-      return { left: left + tileW / 2 - zoneW / 2, top: top - gap - zoneH };
-    case "bottom":
-      return { left: left + tileW / 2 - zoneW / 2, top: top + tileH + gap };
-  }
-}
 
 /** Posición exacta donde iría la siguiente ficha (misma lógica que al colocarla). */
-export function predictNextTileStyle(
+function predictNextTileStyle(
   tiles: BoardTileInput[],
   side: Side,
   nextTile: { leftValue: number; rightValue: number },
@@ -791,7 +795,7 @@ export function predictNextTileStyle(
   return side === "left" ? (styles[0] ?? null) : (styles[styles.length - 1] ?? null);
 }
 
-export function computeChainLayout(
+function computeChainLayout(
   tiles: BoardTileInput[],
   chainWidth: number,
   chainHeight: number,
@@ -809,8 +813,8 @@ export function computeChainLayout(
   };
 
   const bounds: Bounds = {
-    minLeft: SIDE_RESERVE,
-    maxRight: chainWidth - SIDE_RESERVE,
+    minLeft: RESERVE,
+    maxRight: chainWidth - RESERVE,
   };
 
   walkRightArm(styles, anchorIndex, bounds);
@@ -821,35 +825,70 @@ export function computeChainLayout(
   return styles;
 }
 
-/** Layout + centrado vertical en el contenedor visible del tablero. */
-export function layoutChainForView(
+
+
+function tileId(t: { leftValue: number; rightValue: number }): string {
+  const a = Math.min(t.leftValue, t.rightValue);
+  const b = Math.max(t.leftValue, t.rightValue);
+  return `${a}-${b}`;
+}
+
+function styleToPositioned(s: PlacedTileStyle): PositionedTile {
+  return {
+    id: tileId(s),
+    x: s.anchor.left ?? 0,
+    y: s.anchor.top ?? 0,
+    w: s.width,
+    h: s.height,
+    orientation: s.orientation,
+    rotation: s.orientation === "vertical" ? 90 : 0,
+    reversed: s.reversed ?? false,
+    leftValue: s.leftValue,
+    rightValue: s.rightValue,
+    isOpening: s.isOpening ?? false,
+    isCorner: false,
+  };
+}
+
+function layoutChainForView(
   tiles: BoardTileInput[],
-  chainWidth: number,
-  chainHeight: number,
+  boardWidth: number,
+  boardHeight: number,
 ): PlacedTileStyle[] {
-  const styles = computeChainLayout(tiles, chainWidth, chainHeight);
+  const styles = computeChainLayout(tiles, boardWidth, boardHeight);
   const extent = getChainExtent(styles);
-  const containerH = extent ? Math.max(300, extent.maxBottom + SIDE_RESERVE) : 300;
+  const containerH = extent ? Math.max(boardHeight, extent.maxBottom + RESERVE) : boardHeight;
   centerChainInContainer(styles, containerH);
   return styles;
 }
 
-export function anchorToCss(anchor: TileAnchor): CSSProperties {
-  const style: CSSProperties = { position: "absolute" };
-  if (anchor.left !== undefined) style.left = anchor.left;
-  if (anchor.top !== undefined) style.top = anchor.top;
-  if (anchor.right !== undefined) style.right = anchor.right;
-  if (anchor.bottom !== undefined) style.bottom = anchor.bottom;
-  return style;
+export function computeLayout(
+  tiles: BoardTileInput[],
+  boardWidth: number,
+  boardHeight: number,
+): PositionedTile[] {
+  return layoutChainForView(tiles, boardWidth, boardHeight).map(styleToPositioned);
 }
 
-export function openingTileToCss(width: number, height: number): CSSProperties {
-  return {
-    position: "absolute",
-    left: "50%",
-    top: "50%",
-    width,
-    height,
-    transform: "translate(-50%, -50%)",
-  };
+export function getLayoutExtent(placed: PositionedTile[]): LayoutExtent | null {
+  if (placed.length === 0) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of placed) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x + p.w);
+    maxY = Math.max(maxY, p.y + p.h);
+  }
+  return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY };
+}
+
+export function predictNext(
+  tiles: BoardTileInput[],
+  side: Side,
+  nextTile: { leftValue: number; rightValue: number },
+  boardWidth: number,
+  boardHeight: number,
+): PositionedTile | null {
+  const style = predictNextTileStyle(tiles, side, nextTile, boardWidth, boardHeight);
+  return style ? styleToPositioned(style) : null;
 }

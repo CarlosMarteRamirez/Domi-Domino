@@ -63,6 +63,8 @@ interface Props {
   onClick?: () => void;
   onDragStart?: (e: React.DragEvent<HTMLButtonElement>) => void;
   className?: string;
+  /** When true, fills the parent box instead of using fixed Tailwind sizes. */
+  fillContainer?: boolean;
 }
 
 export function DominoTile({
@@ -76,6 +78,7 @@ export function DominoTile({
   onClick,
   onDragStart,
   className,
+  fillContainer = false,
 }: Props) {
   const resolved =
     orientation === "auto" ? (low === high ? "vertical" : "horizontal") : orientation;
@@ -90,7 +93,12 @@ export function DominoTile({
       disabled={!onClick && !draggable}
       className={cn(
         "relative flex items-stretch rounded-md bg-slate-100 shadow-md ring-1 ring-black/20 transition",
-        horizontal ? "h-10 w-20 flex-row" : "h-20 w-10 flex-col",
+        fillContainer
+          ? "h-full w-full"
+          : horizontal
+            ? "h-10 w-20 flex-row"
+            : "h-20 w-10 flex-col",
+        fillContainer && (horizontal ? "flex-row" : "flex-col"),
         flip && "flex-row-reverse",
         playable && "ring-2 ring-primary hover:-translate-y-1",
         selected && "-translate-y-1 ring-2 ring-amber-400",
