@@ -404,7 +404,7 @@ export const BoardView = React.forwardRef<BoardViewHandle, Props>(function Board
             "relative mx-auto w-full",
             isDraggingOver && hasSelection && "ring-1 ring-domino-blue-light/20 rounded-xl",
           )}
-          style={{ height: chainContentH, maxHeight: chainSize.h }}
+          style={{ height: chainSize.h /*chainContentH*/, maxHeight: chainSize.h }}
         >
           {board.tiles.map((t, i) => {
             const tile = placed[i];

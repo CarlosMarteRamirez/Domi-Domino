@@ -279,24 +279,56 @@ export class RoomManager {
     return this.runLocked(code, () => this.disconnectImpl(code, userId));
   }
 
+  /** Quita al jugador del lobby (memoria + BD) y transfiere anfitrión si hace falta. */
+  private async removeMemberFromLobby(room: RoomRuntime, userId: string) {
+    room.members.delete(userId);
+    await prisma.roomMember.deleteMany({ where: { roomId: room.roomId, userId } });
+
+    if (room.hostId !== userId) return;
+
+    const nextHost = [...room.members.values()].sort((a, b) => a.seat - b.seat)[0];
+    if (!nextHost) return;
+
+    room.hostId = nextHost.userId;
+    await prisma.room.update({
+      where: { id: room.roomId },
+      data: { hostId: nextHost.userId },
+    });
+  }
+
   private async disconnectImpl(code: string, userId: string) {
     const room = this.rooms.get(code);
     const member = room?.members.get(userId);
     if (!room || !member) return;
 
     member.connections = Math.max(0, member.connections - 1);
+    if (member.connections > 0) {
+      this.broadcastLobby(room);
+      return;
+    }
+
+    if (room.status === "LOBBY") {
+      await this.removeMemberFromLobby(room, userId);
+      if (room.members.size === 0) {
+        await this.closeRoom(room, "La sala se cerró porque todos abandonaron");
+        return;
+      }
+      this.syncAutoStart(room);
+      this.broadcastLobby(room);
+      return;
+    }
 
     const anyoneConnected = [...room.members.values()].some((m) => m.connections > 0);
     if (!anyoneConnected) {
-      const reason =
-        room.status === "IN_GAME"
-          ? "La partida se canceló porque todos abandonaron la sala"
-          : "La sala se cerró porque todos abandonaron";
-      await this.closeRoom(room, reason);
+      await this.closeRoom(
+        room,
+        "La partida se canceló porque todos abandonaron la sala",
+      );
       return;
     }
 
     this.broadcastLobby(room);
+    if (room.engine) this.broadcastMatch(room);
   }
 
   private canBeginMatch(room: RoomRuntime): boolean {
